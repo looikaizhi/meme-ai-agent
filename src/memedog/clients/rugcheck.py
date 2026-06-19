@@ -79,13 +79,13 @@ def parse_report(report: dict) -> dict:
     if top_holders is None:
         top10_pct: Optional[float] = None
     else:
-        top10_pct = sum(h.get("pct", 0.0) for h in top_holders[:10])
+        top10_pct = sum((h.get("pct", 0.0) for h in top_holders[:10]), 0.0)
 
     max_wallet_pct: Optional[float] = report.get("largestWalletPct")
 
     insiders = report.get("insiders") or {}
-    dev_pct: Optional[float] = insiders.get("devPct") if insiders else None
-    sniper_pct: Optional[float] = insiders.get("sniperPct") if insiders else None
+    dev_pct: Optional[float] = insiders.get("devPct")
+    sniper_pct: Optional[float] = insiders.get("sniperPct")
 
     # --- trust score and risk level ---
     trust_score: Optional[int] = report.get("score")

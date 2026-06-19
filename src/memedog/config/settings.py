@@ -6,7 +6,7 @@ secrets from .env via pydantic-settings.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
 from pydantic import BaseModel
@@ -57,7 +57,7 @@ class HardFilterConfig(BaseModel):
     authority: AuthorityFilterConfig
     holders: HoldersFilterConfig
     momentum: MomentumFilterConfig
-    on_rugcheck_failure: str
+    on_rugcheck_failure: Literal["drop", "pass_flagged"]
 
 
 class EnricherConfig(BaseModel):

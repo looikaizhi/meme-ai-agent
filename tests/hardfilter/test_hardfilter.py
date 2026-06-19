@@ -5,10 +5,7 @@ Uses fake rugcheck object (no real network) and fake TokenCandidate instances.
 """
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
-from typing import Optional
-from unittest.mock import AsyncMock
 
 import pytest
 
