@@ -1,0 +1,52 @@
+scanner:
+  scan_interval_sec: 30
+  chain: solana
+  min_pair_age_min: 20
+  max_pair_age_min: 360
+  prefilter_min_liquidity_usd: 10000
+  prefilter_min_volume_5m: 500
+  dedup_ttl_min: 720
+hardfilter:
+  authority:
+    require_mint_revoked: true
+    require_freeze_revoked: true
+    require_lp_burned_or_locked: true
+  holders:
+    max_top10_pct: 35
+    max_single_wallet_pct: 20
+    max_dev_pct: 10
+    max_sniper_pct: 30
+  momentum:
+    min_liquidity_usd: 20000
+    min_volume_5m: 1000
+    min_buy_sell_ratio_5m: 1.0
+    max_fdv_to_liquidity: 50
+  on_rugcheck_failure: drop
+enricher:
+  per_provider_timeout_sec: 8
+  smart_money_wallets_file: config/smart_wallets.txt
+  twitter_lookback_min: 60
+scoring:
+  weights: { safety: 0.35, holders: 0.25, momentum: 0.25, social: 0.15 }
+  holders: { top10_full_score_at: 15, top10_zero_score_at: 50, max_wallet_zero_at: 25 }
+  momentum: { liquidity_full_at: 100000, volume_5m_full_at: 20000 }
+  missing_dimension_weight_factor: 0.5
+  neutral_score: 50
+llmjudge:
+  models: { bull: "codex:default", bear: "codex:default", judge: "codex:default" }
+  temperature: { bull: 0.5, bear: 0.5, judge: 0.2 }
+  max_tokens: 1024
+  repair_retries: 1
+  codex: { bin: "codex", timeout_sec: 120, sandbox: "read-only" }
+papertrader:
+  entry_min_confidence: 0.6
+  size_usd: 100
+  take_profit_pct: 0.50
+  stop_loss_pct: 0.25
+  max_hold_minutes: 120
+  price_poll_sec: 30
+  starting_balance_usd: 10000
+alert:
+  enabled: true
+  only_signal: BULLISH
+  min_confidence: 0.6
