@@ -32,4 +32,5 @@ class DexScreenerClient(BaseHTTPClient):
         if not isinstance(data, dict):
             logger.warning("DexScreener returned unexpected response type: %s", type(data))
             return []
-        return data.get("pairs", [])
+        # Fix 2 — treat {"pairs": null} the same as {"pairs": []}
+        return data.get("pairs") or []

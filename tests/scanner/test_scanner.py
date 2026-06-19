@@ -334,3 +334,86 @@ class TestDataSourceErrorHandling:
             await scanner.scan()
         except DataSourceError:
             pytest.fail("scan() propagated DataSourceError to caller")
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 — missing baseToken must not crash the scan
+# ---------------------------------------------------------------------------
+
+class TestMalformedPairs:
+    async def test_missing_base_token_skips_only_bad_pair(self):
+        """A batch with one good pair + one pair missing baseToken returns only the good candidate."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        good = make_raw_pair(address="MINT_GOOD", pair_address="PAIR_GOOD")
+        # Pair missing baseToken entirely
+        bad = {
+            "pairAddress": "PAIR_BAD",
+            "priceUsd": "0.001",
+            "liquidity": {"usd": 25_000.0},
+            "fdv": 1_000_000.0,
+            "volume": {"m5": 500.0, "h1": 3_000.0},
+            "txns": {"m5": {"buys": 20, "sells": 8}},
+            "priceChange": {"m5": 3.5},
+            "pairCreatedAt": good["pairCreatedAt"],  # same age so it passes prefilter
+        }
+        client = make_fake_client([good, bad])
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert results[0].mint == "MINT_GOOD"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 — configurable chain
+# ---------------------------------------------------------------------------
+
+class TestConfigurableChain:
+    async def test_candidate_chain_matches_config(self):
+        """TokenCandidate.chain is set from ScannerConfig.chain, not hardcoded."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config(chain="ethereum")
+        pair = make_raw_pair()
+        client = make_fake_client([pair])
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert results[0].chain == "ethereum"
+
+
+# ---------------------------------------------------------------------------
+# Fix 10 — naive datetime rejected at model boundary
+# ---------------------------------------------------------------------------
+
+class TestAwareDatetimeEnforcement:
+    def test_naive_datetime_raises_validation_error(self):
+        """TokenCandidate must reject a naive (timezone-unaware) pair_created_at."""
+        from datetime import datetime
+
+        import pytest
+        from pydantic import ValidationError
+
+        from memedog.models import TokenCandidate
+
+        with pytest.raises(ValidationError):
+            TokenCandidate(
+                mint="mintABC",
+                pair_address="pairXYZ",
+                symbol="DOG",
+                pair_created_at=datetime(2024, 1, 1, 12, 0, 0),  # naive — no tzinfo
+                price_usd=0.0001,
+                liquidity_usd=15000.0,
+                fdv_usd=500000.0,
+                volume_5m=800.0,
+                volume_1h=12000.0,
+                txns_5m_buys=40,
+                txns_5m_sells=10,
+                price_change_5m=5.2,
+                trace_id="trace-001",
+            )

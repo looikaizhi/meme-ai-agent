@@ -1,7 +1,5 @@
 """TokenCandidate data contract."""
-from datetime import datetime
-
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 
 
 class TokenCandidate(BaseModel):
@@ -9,7 +7,8 @@ class TokenCandidate(BaseModel):
     pair_address: str
     symbol: str
     chain: str = "solana"
-    pair_created_at: datetime
+    # Fix 10 — enforce timezone-aware datetimes at the model boundary
+    pair_created_at: AwareDatetime
     price_usd: float
     liquidity_usd: float
     fdv_usd: float

@@ -94,3 +94,18 @@ class TestFetchSolanaPairs:
                 await client.fetch_solana_pairs()
 
         assert captured_request["params"].get("q") == "solana"
+
+    async def test_returns_empty_list_when_pairs_is_null(self):
+        """fetch_solana_pairs returns [] when response has pairs=null (Fix 2)."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {"pairs": None}
+
+        with respx.mock:
+            respx.get("https://api.dexscreener.com/latest/dex/search").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            async with DexScreenerClient() as client:
+                result = await client.fetch_solana_pairs()
+
+        assert result == []

@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timezone
+from typing import Protocol
 from uuid import uuid4
 
 from memedog.clients.base import DataSourceError
@@ -11,6 +11,17 @@ from memedog.config.settings import ScannerConfig
 from memedog.models import TokenCandidate
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Fix 5 — type-annotate client via Protocol
+# ---------------------------------------------------------------------------
+
+
+class PairFetcher(Protocol):
+    """Structural type for any object that can fetch trading pairs."""
+
+    async def fetch_solana_pairs(self) -> list[dict]: ...
 
 
 class Scanner:
@@ -24,7 +35,7 @@ class Scanner:
         A :class:`~memedog.config.settings.ScannerConfig` instance.
     """
 
-    def __init__(self, client, cfg: ScannerConfig) -> None:
+    def __init__(self, client: PairFetcher, cfg: ScannerConfig) -> None:
         self._client = client
         self._cfg = cfg
         # mint -> unix timestamp (float) of first emission
@@ -50,7 +61,8 @@ class Scanner:
             return []
 
         now_utc = datetime.now(timezone.utc)
-        now_ts = time.time()
+        # Fix 6 — single clock source: derive now_ts from the same snapshot
+        now_ts = now_utc.timestamp()
 
         candidates: list[TokenCandidate] = []
 
@@ -67,8 +79,19 @@ class Scanner:
             if not self._passes_prefilter(pair, now_utc):
                 continue
 
+            # Fix 1 — wrap per-pair dedup key extraction + convert so a
+            # malformed pair skips only itself, not the whole scan.
+            try:
+                mint = pair["baseToken"]["address"]
+            except (KeyError, TypeError) as exc:
+                logger.warning(
+                    "Skipping pair %s — missing baseToken: %s",
+                    pair.get("pairAddress"),
+                    exc,
+                )
+                continue
+
             # --- Dedup ---
-            mint = pair["baseToken"]["address"]
             if mint in self._seen:
                 continue
 
@@ -89,17 +112,28 @@ class Scanner:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _parse_created_at(pair: dict) -> datetime:
+        """Fix 7 — single helper to parse pairCreatedAt ms-epoch → aware datetime."""
+        return datetime.fromtimestamp(pair["pairCreatedAt"] / 1000, tz=timezone.utc)
+
     def _passes_prefilter(self, pair: dict, now_utc: datetime) -> bool:
         """Return True if *pair* satisfies all configured prefilter thresholds."""
         try:
-            created_at_ms: int = pair["pairCreatedAt"]
+            # Fix 7 — reuse _parse_created_at instead of duplicating the parse
+            created_at = self._parse_created_at(pair)
             liquidity_usd: float = float(pair["liquidity"]["usd"])
             volume_m5: float = float(pair["volume"]["m5"])
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as exc:
+            # Fix 4 — log a warning so API schema breakage is observable
+            logger.warning(
+                "Skipping pair %s in prefilter — schema mismatch: %s",
+                pair.get("pairAddress"),
+                exc,
+            )
             return False
 
         # Age check
-        created_at = datetime.fromtimestamp(created_at_ms / 1000, tz=timezone.utc)
         age_min = (now_utc - created_at).total_seconds() / 60.0
 
         if age_min < self._cfg.min_pair_age_min:
@@ -119,14 +153,14 @@ class Scanner:
 
     def _convert(self, pair: dict) -> TokenCandidate:
         """Convert a raw DexScreener pair dict to a :class:`TokenCandidate`."""
-        created_at = datetime.fromtimestamp(
-            pair["pairCreatedAt"] / 1000, tz=timezone.utc
-        )
+        # Fix 7 — reuse _parse_created_at
+        created_at = self._parse_created_at(pair)
         return TokenCandidate(
             mint=pair["baseToken"]["address"],
             pair_address=pair["pairAddress"],
             symbol=pair["baseToken"]["symbol"],
-            chain="solana",
+            # Fix 3 — honour configurable chain instead of hardcoding "solana"
+            chain=self._cfg.chain,
             pair_created_at=created_at,
             price_usd=float(pair["priceUsd"]),
             liquidity_usd=float(pair["liquidity"]["usd"]),
