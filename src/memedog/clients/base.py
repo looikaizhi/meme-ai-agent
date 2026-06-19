@@ -50,7 +50,9 @@ class BaseHTTPClient:
     def _build_url(self, url: str) -> str:
         if url.startswith("http://") or url.startswith("https://"):
             return url
-        return self._base_url + url
+        if not self._base_url:
+            return url
+        return self._base_url.rstrip("/") + "/" + url.lstrip("/")
 
     async def _request(
         self,
@@ -80,7 +82,12 @@ class BaseHTTPClient:
                     response.status_code,
                 )
             except httpx.HTTPError as exc:
-                last_exc = exc
+                # Wrap as DataSourceError so the final raise does not leak
+                # a raw httpx type as __cause__.
+                last_exc = DataSourceError(
+                    f"{method} {full_url} raised httpx error: {exc}"
+                )
+                last_exc.__cause__ = exc  # preserve the original chain
                 logger.warning(
                     "Attempt %d/%d: %s %s → httpx error: %s",
                     attempt + 1,

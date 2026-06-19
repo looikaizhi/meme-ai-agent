@@ -75,6 +75,36 @@ class TestMomentumInfo:
         )
         assert m.available is True
 
+    def test_degraded_construct_no_error(self):
+        """MomentumInfo(available=False) must not raise ValidationError.
+
+        When a data source is unavailable the Info object must be
+        constructible with only available=False so the pipeline can degrade
+        gracefully rather than crashing.
+        """
+        from memedog.models import MomentumInfo
+
+        m = MomentumInfo(available=False)
+        assert m.available is False
+        assert m.liquidity_usd is None
+        assert m.volume_5m is None
+        assert m.volume_1h is None
+        assert m.buy_sell_ratio_5m is None
+        assert m.fdv_to_liquidity is None
+
+    def test_all_info_models_degradable(self):
+        """SafetyInfo, HolderInfo, and SocialInfo also construct with available=False."""
+        from memedog.models import HolderInfo, SafetyInfo, SocialInfo
+
+        safety = SafetyInfo(available=False)
+        assert safety.available is False
+
+        holders = HolderInfo(available=False)
+        assert holders.available is False
+
+        social = SocialInfo(available=False)
+        assert social.available is False
+
 
 class TestSocialInfo:
     def test_defaults(self):

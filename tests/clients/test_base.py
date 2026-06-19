@@ -51,11 +51,15 @@ class TestRetryBehavior:
         assert result == {"ok": True}
 
     async def test_persistent_500_raises_datasource_error(self):
-        """Three consecutive 500s should exhaust retries and raise DataSourceError."""
+        """Three consecutive 500s should exhaust retries and raise DataSourceError.
+
+        The implementation makes exactly max_retries total attempts (including
+        the first), so route.call_count must equal max_retries after failure.
+        """
         from memedog.clients.base import BaseHTTPClient, DataSourceError
 
         with respx.mock:
-            respx.get("https://api.example.com/fail").mock(
+            route = respx.get("https://api.example.com/fail").mock(
                 return_value=httpx.Response(500, json={"error": "always fails"})
             )
             async with BaseHTTPClient(
@@ -64,6 +68,40 @@ class TestRetryBehavior:
                 with patch("asyncio.sleep", new_callable=AsyncMock):
                     with pytest.raises(DataSourceError):
                         await client.get_json("/fail")
+            # The client makes exactly max_retries total attempts (1 initial + 2 retries)
+            assert route.call_count == 3
+
+
+class TestExponentialBackoff:
+    async def test_sleep_called_with_exponential_delays(self):
+        """On a 3-attempt run with backoff_base=0.01 the delays must be 0.01 then 0.02.
+
+        The implementation sleeps *before* each retry (not after the last
+        attempt), so for max_retries=3 there are exactly 2 sleep calls:
+          attempt 0 → sleep(0.01 * 2**0) = sleep(0.01)
+          attempt 1 → sleep(0.01 * 2**1) = sleep(0.02)
+          attempt 2 → last attempt, no sleep
+        """
+        from memedog.clients.base import BaseHTTPClient, DataSourceError
+
+        with respx.mock:
+            respx.get("https://api.example.com/slow").mock(
+                return_value=httpx.Response(500, json={"error": "always fails"})
+            )
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                async with BaseHTTPClient(
+                    base_url="https://api.example.com",
+                    max_retries=3,
+                    backoff_base=0.01,
+                ) as client:
+                    with pytest.raises(DataSourceError):
+                        await client.get_json("/slow")
+
+        # Must have slept exactly twice with exponential delays
+        assert mock_sleep.call_count == 2
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays[0] == pytest.approx(0.01)
+        assert delays[1] == pytest.approx(0.02)
 
 
 class TestPostJson:
@@ -96,6 +134,58 @@ class TestContextManager:
 
         client = BaseHTTPClient(base_url="https://api.example.com")
         await client.aclose()  # should not raise
+
+
+class TestBuildUrl:
+    def test_url_with_leading_slash_joins_correctly(self):
+        """A url starting with / must join to base_url without double slash."""
+        from memedog.clients.base import BaseHTTPClient
+
+        client = BaseHTTPClient(base_url="https://api.example.com")
+        assert client._build_url("/data") == "https://api.example.com/data"
+
+    def test_url_without_leading_slash_joins_correctly(self):
+        """A url WITHOUT a leading slash must still insert a separator slash."""
+        from memedog.clients.base import BaseHTTPClient
+
+        client = BaseHTTPClient(base_url="https://api.example.com")
+        assert client._build_url("data") == "https://api.example.com/data"
+
+    def test_absolute_url_returned_unchanged(self):
+        """An absolute http(s) URL must pass through unchanged."""
+        from memedog.clients.base import BaseHTTPClient
+
+        client = BaseHTTPClient(base_url="https://api.example.com")
+        assert client._build_url("https://other.com/x") == "https://other.com/x"
+
+    def test_no_base_url_returns_url_unchanged(self):
+        """When base_url is empty, url is returned as-is."""
+        from memedog.clients.base import BaseHTTPClient
+
+        client = BaseHTTPClient(base_url="")
+        assert client._build_url("data") == "data"
+
+
+class TestHttpxErrorWrapped:
+    async def test_httpx_error_wrapped_as_datasource_error(self):
+        """When all retries fail with httpx.HTTPError, the final raise must be
+        DataSourceError whose __cause__ is also DataSourceError (not bare httpx).
+        """
+        from memedog.clients.base import BaseHTTPClient, DataSourceError
+
+        with respx.mock:
+            respx.get("https://api.example.com/broken").mock(
+                side_effect=httpx.ConnectError("refused")
+            )
+            async with BaseHTTPClient(
+                base_url="https://api.example.com", max_retries=2, backoff_base=0
+            ) as client:
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    with pytest.raises(DataSourceError) as exc_info:
+                        await client.get_json("/broken")
+
+        # The __cause__ must be a DataSourceError, not a raw httpx exception
+        assert isinstance(exc_info.value.__cause__, DataSourceError)
 
 
 class TestHttpErrorRetry:

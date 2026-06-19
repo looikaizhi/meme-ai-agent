@@ -29,12 +29,12 @@ class HolderInfo(BaseModel):
 
 class MomentumInfo(BaseModel):
     available: bool = True
-    liquidity_usd: float
-    volume_5m: float
-    volume_1h: float
-    buy_sell_ratio_5m: float
+    liquidity_usd: Optional[float] = None
+    volume_5m: Optional[float] = None
+    volume_1h: Optional[float] = None
+    buy_sell_ratio_5m: Optional[float] = None
     unique_buyers_1h: Optional[int] = None
-    fdv_to_liquidity: float
+    fdv_to_liquidity: Optional[float] = None
 
 
 class SocialInfo(BaseModel):

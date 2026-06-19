@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_YAML = Path(__file__).parent / "thresholds.yaml"
+# Anchor .env to the project root (three parents up from this file:
+#   settings.py → config/ → memedog/ → src/ → project root)
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +121,9 @@ class AlertConfig(BaseModel):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(_PROJECT_ROOT / ".env"), extra="ignore"
+    )
 
     helius_api_key: Optional[str] = None
     rugcheck_api_key: Optional[str] = None
