@@ -331,3 +331,15 @@ def test_evaluate_exit_time_is_utc_aware(
     rec = trader.evaluate(pos, current_price=1.60)
     assert rec is not None
     assert rec.exit_time.tzinfo is not None
+
+
+def test_evaluate_zero_entry_price_returns_none_without_raising(
+    trader: PaperTrader, store: Store
+) -> None:
+    """evaluate() with entry_price=0 returns None and does not raise ZeroDivisionError."""
+    pos = _open_pos(entry_price=0.0)
+    store.save_position(pos)
+
+    # Must not raise ZeroDivisionError
+    rec = trader.evaluate(pos, current_price=1.0)
+    assert rec is None

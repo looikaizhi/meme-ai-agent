@@ -315,8 +315,8 @@ class Store:
         for row in rows:
             try:
                 results.append(TokenSnapshot.model_validate_json(row["payload"]))
-            except Exception:
-                logger.warning("Failed to deserialize snapshot payload; skipping.")
+            except Exception as exc:
+                logger.warning("skipping corrupt snapshot payload: %s", exc)
         return results
 
     # ------------------------------------------------------------------

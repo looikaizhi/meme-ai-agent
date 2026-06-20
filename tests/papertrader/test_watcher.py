@@ -220,3 +220,16 @@ async def test_tick_empty_open_positions_returns_empty(
     watcher = PriceWatcher(store=store, trader=trader, price_fn=price_fn, cfg=cfg)
     records = await watcher.tick()
     assert records == []
+
+
+# ---------------------------------------------------------------------------
+# Tests: public package exports
+# ---------------------------------------------------------------------------
+
+
+def test_papertrader_package_exports_pricewatcher() -> None:
+    """PriceWatcher and PaperTrader are both importable from memedog.papertrader."""
+    from memedog.papertrader import PaperTrader, PriceWatcher  # noqa: F401
+
+    assert PriceWatcher is not None
+    assert PaperTrader is not None

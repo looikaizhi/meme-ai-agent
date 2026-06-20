@@ -309,3 +309,33 @@ def test_store_close_is_idempotent(db_path: str) -> None:
     s = Store(db_path)
     s.close()
     s.close()  # second close should not raise
+
+
+# ---------------------------------------------------------------------------
+# Test: corrupt snapshot payloads are logged and skipped
+# ---------------------------------------------------------------------------
+
+
+def test_recent_snapshots_logs_and_skips_corrupt_payload(
+    store: Store, caplog: pytest.LogCaptureFixture
+) -> None:
+    """recent_snapshots skips corrupt JSON payloads and logs a warning."""
+    import logging
+
+    # Insert a corrupt payload directly into the DB
+    store._conn.execute(
+        """
+        INSERT INTO snapshots (mint, trace_id, created_at, payload)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("MINT_BAD", "trace-bad", "2024-01-01T00:00:00+00:00", "NOT_VALID_JSON"),
+    )
+    store._conn.commit()
+
+    with caplog.at_level(logging.WARNING, logger="memedog.store"):
+        results = store.recent_snapshots()
+
+    # Corrupt row is skipped
+    assert results == []
+    # Warning is logged with the error detail
+    assert any("skipping corrupt snapshot payload" in r.message for r in caplog.records)

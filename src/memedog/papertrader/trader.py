@@ -116,6 +116,13 @@ class PaperTrader:
         if now is None:
             now = datetime.now(tz=timezone.utc)
 
+        if position.entry_price == 0:
+            logger.error(
+                "evaluate() called with entry_price=0 for mint=%s; cannot compute pct_change",
+                position.mint,
+            )
+            return None
+
         pct_change = (current_price - position.entry_price) / position.entry_price
         elapsed = now - position.entry_time
 
