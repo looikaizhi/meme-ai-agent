@@ -178,7 +178,7 @@ async def fetch_social(
     # --- smart money buys (helius, best-effort) ---
     try:
         smart_money_buys = await helius_client.count_smart_money_buys(mint, smart_wallets)
-        smart_money_ok = True
+        smart_money_ok = smart_money_buys is not None
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "fetch_social: smart money query failed for mint %s: %s", mint, exc
@@ -189,7 +189,7 @@ async def fetch_social(
         twitter_result = await twitter_client.count_mentions(symbol, lookback_min)
         twitter_mentions_1h = twitter_result.get("mentions_1h")
         twitter_growth = twitter_result.get("growth")
-        twitter_ok = True
+        twitter_ok = twitter_mentions_1h is not None
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "fetch_social: twitter query failed for symbol %s: %s", symbol, exc

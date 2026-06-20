@@ -11,6 +11,9 @@ Design decision documented here:
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 import respx
 import httpx
@@ -151,3 +154,36 @@ class TestWithBearer:
         assert route.called
         request = route.calls.last.request
         assert request.headers.get("authorization") == f"Bearer {BEARER}"
+
+    async def test_start_time_param_sent_for_lookback(self):
+        """count_mentions must send start_time param corresponding to ~lookback_min minutes ago."""
+        from memedog.clients.twitter import TwitterClient
+
+        before_call = datetime.now(timezone.utc)
+
+        with respx.mock:
+            route = respx.get("https://api.twitter.com/2/tweets/counts/recent").mock(
+                return_value=httpx.Response(200, json=COUNTS_RESPONSE)
+            )
+            async with TwitterClient(bearer_token=BEARER) as client:
+                await client.count_mentions(QUERY, LOOKBACK_MIN)
+
+        after_call = datetime.now(timezone.utc)
+
+        assert route.called
+        request = route.calls.last.request
+        qs = parse_qs(urlparse(str(request.url)).query)
+
+        assert "start_time" in qs, "start_time query param must be present"
+
+        sent_start = datetime.fromisoformat(qs["start_time"][0].replace("Z", "+00:00"))
+
+        # The sent start_time should be approximately lookback_min minutes before now.
+        # Allow ±5s slack for test execution time.
+        expected_earliest = before_call - timedelta(minutes=LOOKBACK_MIN) - timedelta(seconds=5)
+        expected_latest = after_call - timedelta(minutes=LOOKBACK_MIN) + timedelta(seconds=5)
+
+        assert expected_earliest <= sent_start <= expected_latest, (
+            f"start_time {sent_start} not within expected window "
+            f"[{expected_earliest}, {expected_latest}]"
+        )

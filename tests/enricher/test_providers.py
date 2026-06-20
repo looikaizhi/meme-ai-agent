@@ -376,3 +376,53 @@ class TestFetchSocial:
 
         assert result.available is True
         assert result.smart_money_buys == 0
+
+    async def test_smart_money_none_and_twitter_raises_returns_unavailable(self):
+        """smart money returns None (best-effort failure) + twitter raises → available=False."""
+        from memedog.enricher.providers import fetch_social
+        from memedog.clients.base import DataSourceError
+
+        mock_helius = AsyncMock()
+        mock_helius.count_smart_money_buys = AsyncMock(return_value=None)
+
+        mock_twitter = AsyncMock()
+        mock_twitter.count_mentions = AsyncMock(
+            side_effect=DataSourceError("twitter bearer not configured")
+        )
+
+        result = await fetch_social(
+            symbol="DOGE",
+            mint="MINT123",
+            helius_client=mock_helius,
+            twitter_client=mock_twitter,
+            smart_wallets={"wallet1"},
+            lookback_min=60,
+        )
+
+        assert result.available is False
+
+    async def test_smart_money_real_value_and_twitter_raises_returns_available(self):
+        """smart money returns a real int + twitter raises → available=True."""
+        from memedog.enricher.providers import fetch_social
+        from memedog.clients.base import DataSourceError
+
+        mock_helius = AsyncMock()
+        mock_helius.count_smart_money_buys = AsyncMock(return_value=5)
+
+        mock_twitter = AsyncMock()
+        mock_twitter.count_mentions = AsyncMock(
+            side_effect=DataSourceError("twitter bearer not configured")
+        )
+
+        result = await fetch_social(
+            symbol="DOGE",
+            mint="MINT123",
+            helius_client=mock_helius,
+            twitter_client=mock_twitter,
+            smart_wallets={"wallet1"},
+            lookback_min=60,
+        )
+
+        assert result.available is True
+        assert result.smart_money_buys == 5
+        assert result.twitter_mentions_1h is None

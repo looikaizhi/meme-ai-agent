@@ -11,6 +11,7 @@ Design decision on missing bearer token:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from memedog.clients.base import BaseHTTPClient, DataSourceError
@@ -60,9 +61,11 @@ class TwitterClient(BaseHTTPClient):
             )
 
         headers = {"authorization": f"Bearer {self._bearer_token}"}
+        start_time = datetime.now(timezone.utc) - timedelta(minutes=lookback_min)
         params = {
             "query": query,
             "granularity": "hour",
+            "start_time": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
         raw = await self.get_json(
