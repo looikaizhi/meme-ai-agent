@@ -79,8 +79,10 @@ def score_safety(info: SafetyInfo, cfg) -> DimensionScore:
             raw -= 15.0
             notes.append(f"{flag_name} is False — deducted 15 pts")
 
-    # Cap for critical/high rug risk
+    # Fix 3: always record CRITICAL/HIGH risk in notes, even when penalties
+    # already pushed raw below the cap so the audit trail is never incomplete.
     if info.rug_risk_level in {"CRITICAL", "HIGH"}:
+        notes.append(f"rug_risk_level={info.rug_risk_level} — high risk detected")
         if raw > 20:
             notes.append(f"rug_risk_level={info.rug_risk_level} — capped raw to 20")
             raw = 20.0
@@ -168,7 +170,7 @@ def score_momentum(info: MomentumInfo, cfg) -> DimensionScore:
         bonus = min(10.0, (info.buy_sell_ratio_5m - 1.0) * 10.0)
         raw = min(100.0, raw + bonus)
 
-    raw = max(0.0, min(100.0, raw))
+    # Fix 5: removed dead clamp here (raw is already within [0,100] at this point)
     return DimensionScore(name="momentum", raw=raw, weight=0.0, weighted=0.0, notes=notes)
 
 
@@ -176,8 +178,12 @@ def score_social(info: SocialInfo, cfg) -> DimensionScore:
     """Score the social dimension (noisy; keep mapping simple).
 
     Sub-metrics:
-    - smart_money_buys: lerp(full_at=10, zero_at=0) — 10 smart buys → 100
-    - twitter_growth: lerp(full_at=2.0, zero_at=-1.0) — 2x growth → 100, -100% → 0
+    - smart_money_buys: lerp(full_at=cfg.social.smart_money_full_at, zero_at=0)
+    - twitter_growth: lerp(full_at=cfg.social.twitter_growth_full_at,
+                           zero_at=cfg.social.twitter_growth_zero_at)
+
+    Fix 4: thresholds are now read from cfg.social (ScoringSocialConfig) rather
+    than being hardcoded, honouring the project's no-hardcoding rule.
 
     Average of available metrics. All None → neutral + note.
     """
@@ -190,11 +196,19 @@ def score_social(info: SocialInfo, cfg) -> DimensionScore:
     scores: list[float] = []
 
     if info.smart_money_buys is not None:
-        s = lerp_score(float(info.smart_money_buys), full_at=10.0, zero_at=0.0)
+        s = lerp_score(
+            float(info.smart_money_buys),
+            full_at=cfg.social.smart_money_full_at,
+            zero_at=0.0,
+        )
         scores.append(s)
 
     if info.twitter_growth is not None:
-        s = lerp_score(info.twitter_growth, full_at=2.0, zero_at=-1.0)
+        s = lerp_score(
+            info.twitter_growth,
+            full_at=cfg.social.twitter_growth_full_at,
+            zero_at=cfg.social.twitter_growth_zero_at,
+        )
         scores.append(s)
 
     if not scores:

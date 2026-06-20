@@ -158,3 +158,31 @@ class TestLoadConfig:
         yaml_alert = _THRESHOLDS["alert"]
         assert cfg.alert.only_signal == yaml_alert["only_signal"]
         assert cfg.alert.enabled == yaml_alert["enabled"]
+
+    # --- Fix 4: scoring.social sub-block ---
+
+    def test_scoring_social_block_present_and_typed(self):
+        """scoring.social must load as a ScoringSocialConfig instance."""
+        from memedog.config.settings import load_config, ScoringSocialConfig
+
+        cfg = load_config()
+        assert isinstance(cfg.scoring.social, ScoringSocialConfig)
+
+    def test_scoring_social_field_types(self):
+        """All ScoringSocialConfig fields must be floats."""
+        from memedog.config.settings import load_config
+
+        cfg = load_config()
+        assert isinstance(cfg.scoring.social.smart_money_full_at, float)
+        assert isinstance(cfg.scoring.social.twitter_growth_full_at, float)
+        assert isinstance(cfg.scoring.social.twitter_growth_zero_at, float)
+
+    def test_scoring_social_values_match_yaml(self):
+        """ScoringSocialConfig values must match thresholds.yaml (yaml as source of truth)."""
+        from memedog.config.settings import load_config
+
+        cfg = load_config()
+        yaml_social = _THRESHOLDS["scoring"]["social"]
+        assert cfg.scoring.social.smart_money_full_at == yaml_social["smart_money_full_at"]
+        assert cfg.scoring.social.twitter_growth_full_at == yaml_social["twitter_growth_full_at"]
+        assert cfg.scoring.social.twitter_growth_zero_at == yaml_social["twitter_growth_zero_at"]

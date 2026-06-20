@@ -77,10 +77,19 @@ class ScoringMomentumConfig(BaseModel):
     volume_5m_full_at: float
 
 
+class ScoringSocialConfig(BaseModel):
+    """Configurable lerp thresholds for the social dimension scorer."""
+
+    smart_money_full_at: float
+    twitter_growth_full_at: float
+    twitter_growth_zero_at: float
+
+
 class ScoringConfig(BaseModel):
     weights: dict[str, float]
     holders: ScoringHoldersConfig
     momentum: ScoringMomentumConfig
+    social: ScoringSocialConfig
     missing_dimension_weight_factor: float
     neutral_score: float
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from memedog.models import SafetyInfo, HolderInfo, MomentumInfo, SocialInfo
-from memedog.config.settings import ScoringConfig, ScoringHoldersConfig, ScoringMomentumConfig
+from memedog.config.settings import ScoringConfig, ScoringHoldersConfig, ScoringMomentumConfig, ScoringSocialConfig
 from memedog.scoring.dimensions import (
     lerp_score,
     score_safety,
@@ -30,6 +30,11 @@ def scoring_cfg() -> ScoringConfig:
         momentum=ScoringMomentumConfig(
             liquidity_full_at=100_000,
             volume_5m_full_at=20_000,
+        ),
+        social=ScoringSocialConfig(
+            smart_money_full_at=10,
+            twitter_growth_full_at=2.0,
+            twitter_growth_zero_at=-1.0,
         ),
         missing_dimension_weight_factor=0.5,
         neutral_score=50.0,
@@ -292,4 +297,175 @@ class TestScoreSocial:
     def test_raw_not_below_0(self, scoring_cfg):
         info = SocialInfo(available=True, smart_money_buys=0, twitter_growth=-10.0)
         ds = score_social(info, scoring_cfg)
+        assert ds.raw >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: CRITICAL/HIGH risk always recorded in notes
+# ---------------------------------------------------------------------------
+
+class TestScoreSafetyRiskLevelNotes:
+    """Fix 3: CRITICAL/HIGH rug_risk_level must always appear in notes,
+    even when penalties have already pushed raw below the 20-point cap."""
+
+    def test_critical_risk_in_notes_when_penalties_already_push_below_20(self, scoring_cfg):
+        """Low trust + all authority flags False pushes raw below 20 before cap.
+        Notes must still mention CRITICAL."""
+        # trust_score=10 → raw=10; -15*3 (all flags False) → raw=-35, clamped to 0
+        # Even without the cap, raw ≤ 20, so the old code skipped the note.
+        info = SafetyInfo(
+            available=True,
+            rug_trust_score=10,
+            rug_risk_level="CRITICAL",
+            mint_authority_revoked=False,
+            freeze_authority_revoked=False,
+            lp_burned_or_locked=False,
+        )
+        ds = score_safety(info, scoring_cfg)
+        assert ds.raw <= 20  # sanity: score is still capped/low
+        assert any("CRITICAL" in n for n in ds.notes), (
+            "Expected 'CRITICAL' risk level to appear in notes even when raw was already ≤ 20"
+        )
+
+    def test_high_risk_in_notes_when_penalties_already_push_below_20(self, scoring_cfg):
+        """Same scenario with HIGH risk level."""
+        info = SafetyInfo(
+            available=True,
+            rug_trust_score=5,
+            rug_risk_level="HIGH",
+            mint_authority_revoked=False,
+            freeze_authority_revoked=False,
+            lp_burned_or_locked=False,
+        )
+        ds = score_safety(info, scoring_cfg)
+        assert ds.raw <= 20
+        assert any("HIGH" in n for n in ds.notes), (
+            "Expected 'HIGH' risk level to appear in notes even when raw was already ≤ 20"
+        )
+
+    def test_critical_risk_in_notes_when_raw_was_above_20(self, scoring_cfg):
+        """When raw starts above 20 the cap note also mentions CRITICAL."""
+        info = SafetyInfo(
+            available=True,
+            rug_trust_score=80,
+            rug_risk_level="CRITICAL",
+        )
+        ds = score_safety(info, scoring_cfg)
+        assert ds.raw <= 20
+        assert any("CRITICAL" in n for n in ds.notes)
+
+    def test_low_risk_level_not_in_notes(self, scoring_cfg):
+        """LOW risk level must NOT produce a risk-level note."""
+        info = SafetyInfo(
+            available=True,
+            rug_trust_score=80,
+            rug_risk_level="LOW",
+        )
+        ds = score_safety(info, scoring_cfg)
+        assert not any("rug_risk_level=LOW" in n for n in ds.notes)
+
+
+# ---------------------------------------------------------------------------
+# Fix 4: social thresholds are configurable
+# ---------------------------------------------------------------------------
+
+class TestScoreSocialConfigurableThresholds:
+    """Fix 4: score_social must honour cfg.social.* instead of hardcoded values."""
+
+    def test_smart_money_full_at_from_config(self, scoring_cfg):
+        """With full_at=5, 5 smart buys should give a score of 100."""
+        from memedog.config.settings import ScoringSocialConfig
+        custom_cfg = ScoringConfig(
+            weights=scoring_cfg.weights,
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=ScoringSocialConfig(
+                smart_money_full_at=5,      # lower threshold: 5 buys → 100
+                twitter_growth_full_at=scoring_cfg.social.twitter_growth_full_at,
+                twitter_growth_zero_at=scoring_cfg.social.twitter_growth_zero_at,
+            ),
+            missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        info = SocialInfo(available=True, smart_money_buys=5, twitter_growth=None)
+        ds = score_social(info, custom_cfg)
+        assert ds.raw == pytest.approx(100.0)
+
+    def test_twitter_growth_thresholds_from_config(self, scoring_cfg):
+        """With twitter_growth_full_at=1.0 and zero_at=0.0, growth=0.5 → 50."""
+        from memedog.config.settings import ScoringSocialConfig
+        custom_cfg = ScoringConfig(
+            weights=scoring_cfg.weights,
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=ScoringSocialConfig(
+                smart_money_full_at=scoring_cfg.social.smart_money_full_at,
+                twitter_growth_full_at=1.0,
+                twitter_growth_zero_at=0.0,
+            ),
+            missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        info = SocialInfo(available=True, smart_money_buys=None, twitter_growth=0.5)
+        ds = score_social(info, custom_cfg)
+        assert ds.raw == pytest.approx(50.0)
+
+    def test_default_thresholds_match_yaml(self, scoring_cfg):
+        """The fixture's social config values must match thresholds.yaml."""
+        import yaml
+        from pathlib import Path
+        yaml_path = (
+            Path(__file__).resolve().parents[2]
+            / "src" / "memedog" / "config" / "thresholds.yaml"
+        )
+        with yaml_path.open("r", encoding="utf-8") as fh:
+            thresholds = yaml.safe_load(fh)
+        yaml_social = thresholds["scoring"]["social"]
+        assert scoring_cfg.social.smart_money_full_at == yaml_social["smart_money_full_at"]
+        assert scoring_cfg.social.twitter_growth_full_at == yaml_social["twitter_growth_full_at"]
+        assert scoring_cfg.social.twitter_growth_zero_at == yaml_social["twitter_growth_zero_at"]
+
+    def test_loaded_config_social_block_matches_yaml(self):
+        """load_config() must expose cfg.scoring.social backed by yaml values."""
+        import yaml
+        from pathlib import Path
+        from memedog.config.settings import load_config, ScoringSocialConfig
+        yaml_path = (
+            Path(__file__).resolve().parents[2]
+            / "src" / "memedog" / "config" / "thresholds.yaml"
+        )
+        with yaml_path.open("r", encoding="utf-8") as fh:
+            thresholds = yaml.safe_load(fh)
+        yaml_social = thresholds["scoring"]["social"]
+        cfg = load_config()
+        assert isinstance(cfg.scoring.social, ScoringSocialConfig)
+        assert cfg.scoring.social.smart_money_full_at == yaml_social["smart_money_full_at"]
+        assert cfg.scoring.social.twitter_growth_full_at == yaml_social["twitter_growth_full_at"]
+        assert cfg.scoring.social.twitter_growth_zero_at == yaml_social["twitter_growth_zero_at"]
+
+
+# ---------------------------------------------------------------------------
+# Fix 5: dead clamp removed from score_momentum
+# ---------------------------------------------------------------------------
+
+class TestScoreMomentumNoDeadClamp:
+    """Fix 5: score_momentum result must still be in [0,100]; no duplicate clamp."""
+
+    def test_result_always_in_range_with_bonus_at_max(self, scoring_cfg):
+        """Even when base avg=100 and bonus=10, result must be clamped to 100."""
+        info = MomentumInfo(
+            available=True,
+            liquidity_usd=200_000,   # above full_at → lerp→100
+            volume_5m=40_000,        # above full_at → lerp→100
+            buy_sell_ratio_5m=5.0,   # bonus = min(10, (5-1)*10)=10 → raw=100, clamped to 100
+        )
+        ds = score_momentum(info, scoring_cfg)
+        assert 0.0 <= ds.raw <= 100.0
+        assert ds.raw == pytest.approx(100.0)
+
+    def test_result_not_below_zero(self, scoring_cfg):
+        """Zero metrics should never produce a negative raw score."""
+        info = MomentumInfo(available=True, liquidity_usd=0.0, volume_5m=0.0,
+                            buy_sell_ratio_5m=0.5)
+        ds = score_momentum(info, scoring_cfg)
         assert ds.raw >= 0.0

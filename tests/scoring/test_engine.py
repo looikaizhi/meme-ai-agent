@@ -14,7 +14,7 @@ from memedog.models import (
     Score,
 )
 from memedog.models.candidate import TokenCandidate
-from memedog.config.settings import ScoringConfig, ScoringHoldersConfig, ScoringMomentumConfig
+from memedog.config.settings import ScoringConfig, ScoringHoldersConfig, ScoringMomentumConfig, ScoringSocialConfig
 from memedog.scoring.engine import ScoreEngine
 
 
@@ -34,6 +34,11 @@ def scoring_cfg() -> ScoringConfig:
         momentum=ScoringMomentumConfig(
             liquidity_full_at=100_000,
             volume_5m_full_at=20_000,
+        ),
+        social=ScoringSocialConfig(
+            smart_money_full_at=10,
+            twitter_growth_full_at=2.0,
+            twitter_growth_zero_at=-1.0,
         ),
         missing_dimension_weight_factor=0.5,
         neutral_score=50.0,
@@ -273,3 +278,157 @@ class TestScoreEngineEdgeCases:
         # All raws = neutral_score=50; weights renormalize uniformly → total = 50
         assert result.total == pytest.approx(scoring_cfg.neutral_score, abs=0.001)
         assert sum(d.weight for d in result.dimensions) == pytest.approx(1.0, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: division-by-zero guard in renormalization
+# ---------------------------------------------------------------------------
+
+class TestScoreEngineDivisionByZeroGuard:
+    """Fix 1: when total effective weight == 0, engine must NOT raise ZeroDivisionError."""
+
+    def test_all_dims_unavailable_factor_zero_no_exception(self, scoring_cfg):
+        """All dims unavailable + missing_dimension_weight_factor=0 → no crash."""
+        zero_factor_cfg = ScoringConfig(
+            weights=scoring_cfg.weights,
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=scoring_cfg.social,
+            missing_dimension_weight_factor=0.0,  # kills all effective weights
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        engine = ScoreEngine(zero_factor_cfg)
+        snapshot = TokenSnapshot(
+            candidate=_make_candidate(),
+            safety=SafetyInfo(available=False),
+            holders=HolderInfo(available=False),
+            momentum=MomentumInfo(available=False),
+            social=SocialInfo(available=False),
+            enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        # Must not raise ZeroDivisionError
+        result = engine.score(snapshot)
+        assert isinstance(result, Score)
+
+    def test_all_dims_unavailable_factor_zero_total_in_valid_range(self, scoring_cfg):
+        """Total score must be in [0, 100] when fallback equal-weights are used."""
+        zero_factor_cfg = ScoringConfig(
+            weights=scoring_cfg.weights,
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=scoring_cfg.social,
+            missing_dimension_weight_factor=0.0,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        engine = ScoreEngine(zero_factor_cfg)
+        snapshot = TokenSnapshot(
+            candidate=_make_candidate(),
+            safety=SafetyInfo(available=False),
+            holders=HolderInfo(available=False),
+            momentum=MomentumInfo(available=False),
+            social=SocialInfo(available=False),
+            enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        result = engine.score(snapshot)
+        assert 0.0 <= result.total <= 100.0
+
+    def test_all_dims_unavailable_factor_zero_weights_sum_to_one(self, scoring_cfg):
+        """Fallback equal weights must still sum to 1.0."""
+        zero_factor_cfg = ScoringConfig(
+            weights=scoring_cfg.weights,
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=scoring_cfg.social,
+            missing_dimension_weight_factor=0.0,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        engine = ScoreEngine(zero_factor_cfg)
+        snapshot = TokenSnapshot(
+            candidate=_make_candidate(),
+            safety=SafetyInfo(available=False),
+            holders=HolderInfo(available=False),
+            momentum=MomentumInfo(available=False),
+            social=SocialInfo(available=False),
+            enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        result = engine.score(snapshot)
+        assert sum(d.weight for d in result.dimensions) == pytest.approx(1.0, abs=1e-9)
+
+    def test_all_dims_unavailable_factor_zero_equal_weights(self, scoring_cfg):
+        """Fallback must assign equal weight 0.25 to each of the 4 dimensions."""
+        zero_factor_cfg = ScoringConfig(
+            weights=scoring_cfg.weights,
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=scoring_cfg.social,
+            missing_dimension_weight_factor=0.0,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        engine = ScoreEngine(zero_factor_cfg)
+        snapshot = TokenSnapshot(
+            candidate=_make_candidate(),
+            safety=SafetyInfo(available=False),
+            holders=HolderInfo(available=False),
+            momentum=MomentumInfo(available=False),
+            social=SocialInfo(available=False),
+            enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        result = engine.score(snapshot)
+        for d in result.dimensions:
+            assert d.weight == pytest.approx(0.25, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: validate weights keys at construction
+# ---------------------------------------------------------------------------
+
+class TestScoreEngineWeightsValidation:
+    """Fix 2: ScoreEngine.__init__ must raise ValueError for missing weight keys."""
+
+    def test_missing_one_key_raises_value_error(self, scoring_cfg):
+        """Omitting 'social' from weights must raise ValueError at construction."""
+        bad_cfg = ScoringConfig(
+            weights={"safety": 0.40, "holders": 0.35, "momentum": 0.25},  # missing social
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=scoring_cfg.social,
+            missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        with pytest.raises(ValueError, match="cfg.weights missing keys"):
+            ScoreEngine(bad_cfg)
+
+    def test_missing_multiple_keys_raises_value_error(self, scoring_cfg):
+        """Omitting multiple keys must also raise ValueError."""
+        bad_cfg = ScoringConfig(
+            weights={"safety": 1.0},  # missing holders, momentum, social
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=scoring_cfg.social,
+            missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        with pytest.raises(ValueError, match="cfg.weights missing keys"):
+            ScoreEngine(bad_cfg)
+
+    def test_extra_keys_allowed_no_error(self, scoring_cfg):
+        """Extra keys beyond the required four must not raise."""
+        extra_cfg = ScoringConfig(
+            weights={
+                "safety": 0.30, "holders": 0.25, "momentum": 0.25, "social": 0.15,
+                "extra_dim": 0.05,
+            },
+            holders=scoring_cfg.holders,
+            momentum=scoring_cfg.momentum,
+            social=scoring_cfg.social,
+            missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
+            neutral_score=scoring_cfg.neutral_score,
+        )
+        # Should not raise
+        engine = ScoreEngine(extra_cfg)
+        assert engine is not None
+
+    def test_all_four_keys_present_no_error(self, scoring_cfg):
+        """Exact required four keys must not raise."""
+        engine = ScoreEngine(scoring_cfg)
+        assert engine is not None

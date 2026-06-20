@@ -10,8 +10,17 @@ Weight renormalization algorithm:
 3. Sum all effective_weights → total_w.
 4. final_weight = effective_weight / total_w  (renormalize to sum=1).
 5. weighted = raw * final_weight; total = sum(weighted).
+
+Edge cases:
+- If total_w == 0 (e.g. missing_dimension_weight_factor=0 and all dims
+  unavailable), fall back to equal weights (0.25 each) so the pipeline
+  never crashes ("降级而非崩溃").
+- cfg.weights must contain all four keys {safety, holders, momentum, social};
+  missing keys raise ValueError at construction time.
 """
 from __future__ import annotations
+
+import logging
 
 from memedog.config.settings import ScoringConfig
 from memedog.models.score import DimensionScore, Score
@@ -23,11 +32,18 @@ from memedog.scoring.dimensions import (
     score_social,
 )
 
+_REQUIRED_WEIGHT_KEYS = {"safety", "holders", "momentum", "social"}
+_logger = logging.getLogger(__name__)
+
 
 class ScoreEngine:
     """Compute a composite Score from a TokenSnapshot."""
 
     def __init__(self, cfg: ScoringConfig) -> None:
+        # Fix 2: validate that all four weight keys are present at construction time
+        missing = _REQUIRED_WEIGHT_KEYS - set(cfg.weights.keys())
+        if missing:
+            raise ValueError(f"cfg.weights missing keys: {missing}")
         self._cfg = cfg
 
     def score(self, snapshot: TokenSnapshot) -> Score:
@@ -49,6 +65,18 @@ class ScoreEngine:
             effective_weights.append(eff)
 
         total_w = sum(effective_weights)
+
+        # Fix 1: guard against division-by-zero when total_w == 0
+        # (can happen when missing_dimension_weight_factor=0 and all dims unavailable)
+        if total_w == 0.0:
+            _logger.warning(
+                "ScoreEngine: total effective weight is 0 — falling back to equal "
+                "weights (0.25 each). This happens when missing_dimension_weight_factor=0 "
+                "and all dimensions are unavailable."
+            )
+            n = len(effective_weights)
+            effective_weights = [1.0 / n] * n
+            total_w = 1.0
 
         # 3. Renormalize and build final DimensionScore objects
         final_dims: list[DimensionScore] = []
