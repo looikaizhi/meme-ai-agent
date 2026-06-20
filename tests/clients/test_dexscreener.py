@@ -109,3 +109,109 @@ class TestFetchSolanaPairs:
                 result = await client.fetch_solana_pairs()
 
         assert result == []
+
+
+class TestGetTokenPrice:
+    """Tests for DexScreenerClient.get_token_price."""
+
+    MINT = "So11111111111111111111111111111111111111112"
+
+    async def test_returns_float_price_when_pair_present(self):
+        """get_token_price returns the float priceUsd from the first pair."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {
+            "pairs": [
+                {
+                    "baseToken": {"address": self.MINT, "symbol": "SOL"},
+                    "priceUsd": "42.50",
+                }
+            ]
+        }
+
+        with respx.mock:
+            respx.get(
+                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
+            ).mock(return_value=httpx.Response(200, json=payload))
+            async with DexScreenerClient() as client:
+                result = await client.get_token_price(self.MINT)
+
+        assert result == pytest.approx(42.50)
+
+    async def test_returns_none_when_pairs_empty(self):
+        """get_token_price returns None when the response has an empty pairs list."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {"pairs": []}
+
+        with respx.mock:
+            respx.get(
+                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
+            ).mock(return_value=httpx.Response(200, json=payload))
+            async with DexScreenerClient() as client:
+                result = await client.get_token_price(self.MINT)
+
+        assert result is None
+
+    async def test_returns_none_when_pairs_missing(self):
+        """get_token_price returns None when response has no 'pairs' key."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {"schemaVersion": "1.0.0"}
+
+        with respx.mock:
+            respx.get(
+                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
+            ).mock(return_value=httpx.Response(200, json=payload))
+            async with DexScreenerClient() as client:
+                result = await client.get_token_price(self.MINT)
+
+        assert result is None
+
+    async def test_returns_none_when_pairs_is_null(self):
+        """get_token_price returns None when pairs is null."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {"pairs": None}
+
+        with respx.mock:
+            respx.get(
+                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
+            ).mock(return_value=httpx.Response(200, json=payload))
+            async with DexScreenerClient() as client:
+                result = await client.get_token_price(self.MINT)
+
+        assert result is None
+
+    async def test_returns_none_when_price_usd_missing(self):
+        """get_token_price returns None when first pair has no priceUsd field."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {
+            "pairs": [
+                {"baseToken": {"address": self.MINT, "symbol": "SOL"}}
+                # no priceUsd
+            ]
+        }
+
+        with respx.mock:
+            respx.get(
+                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
+            ).mock(return_value=httpx.Response(200, json=payload))
+            async with DexScreenerClient() as client:
+                result = await client.get_token_price(self.MINT)
+
+        assert result is None
+
+    async def test_propagates_data_source_error_on_http_failure(self):
+        """get_token_price lets DataSourceError propagate on HTTP errors."""
+        from memedog.clients.base import DataSourceError
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        with respx.mock:
+            respx.get(
+                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
+            ).mock(return_value=httpx.Response(500, text="Internal Server Error"))
+            async with DexScreenerClient(max_retries=1) as client:
+                with pytest.raises(DataSourceError):
+                    await client.get_token_price(self.MINT)

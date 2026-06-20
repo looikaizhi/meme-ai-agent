@@ -71,6 +71,11 @@ class Orchestrator:
         self._store = store
         self._cfg = cfg
 
+    @property
+    def paper_trader(self):
+        """Read-only access to the injected paper trader."""
+        return self._paper_trader
+
     async def run_cycle(self) -> list[Signal]:
         """Run one full pipeline cycle and return the collected signals.
 

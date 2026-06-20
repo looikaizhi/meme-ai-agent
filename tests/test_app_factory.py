@@ -124,6 +124,40 @@ def test_build_price_fn_returns_callable(cfg):
     assert asyncio.iscoroutinefunction(price_fn)
 
 
+@pytest.mark.asyncio
+async def test_build_price_fn_delegates_to_get_token_price(cfg):
+    """build_price_fn delegates to get_token_price and returns the float price."""
+    from unittest.mock import AsyncMock
+    from memedog.app_factory import build_price_fn
+    from memedog.clients.dexscreener import DexScreenerClient
+
+    dex_client = DexScreenerClient()
+    dex_client.get_token_price = AsyncMock(return_value=1.23)
+
+    price_fn = build_price_fn(dex_client)
+    result = await price_fn("SOMEMINT")
+
+    assert result == pytest.approx(1.23)
+    dex_client.get_token_price.assert_awaited_once_with("SOMEMINT")
+
+
+@pytest.mark.asyncio
+async def test_build_price_fn_returns_none_on_exception(cfg):
+    """build_price_fn catches exceptions from get_token_price and returns None."""
+    from unittest.mock import AsyncMock
+    from memedog.app_factory import build_price_fn
+    from memedog.clients.dexscreener import DexScreenerClient
+    from memedog.clients.base import DataSourceError
+
+    dex_client = DexScreenerClient()
+    dex_client.get_token_price = AsyncMock(side_effect=DataSourceError("network failure"))
+
+    price_fn = build_price_fn(dex_client)
+    result = await price_fn("SOMEMINT")
+
+    assert result is None
+
+
 # ---------------------------------------------------------------------------
 # Test: __main__ imports without side effects
 # ---------------------------------------------------------------------------

@@ -115,15 +115,7 @@ def build_price_fn(dex_client: DexScreenerClient):
     async def price_fn(mint: str) -> Optional[float]:
         """Fetch the latest USD price for *mint* from DexScreener."""
         try:
-            pairs = await dex_client.fetch_solana_pairs()
-            for pair in pairs:
-                try:
-                    if pair["baseToken"]["address"] == mint:
-                        return float(pair["priceUsd"])
-                except (KeyError, TypeError, ValueError):
-                    continue
-            logger.debug("price_fn: no pair found for mint=%s", mint)
-            return None
+            return await dex_client.get_token_price(mint)
         except Exception as exc:
             logger.warning("price_fn: error fetching price for mint=%s: %s", mint, exc)
             return None

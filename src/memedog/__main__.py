@@ -44,7 +44,7 @@ async def main() -> None:
     # Build the price function and PriceWatcher
     dex_client = DexScreenerClient()
     price_fn = build_price_fn(dex_client)
-    paper_trader = orch._paper_trader  # reuse the one already inside the orchestrator
+    paper_trader = orch.paper_trader  # reuse the one already inside the orchestrator
     watcher = PriceWatcher(
         store=store,
         trader=paper_trader,

@@ -279,6 +279,27 @@ def cfg() -> Config:
 # ---------------------------------------------------------------------------
 
 
+def test_paper_trader_property_returns_injected_trader(store: Store, cfg: Config) -> None:
+    """paper_trader property returns the injected paper_trader instance."""
+    from memedog.orchestrator import Orchestrator
+
+    paper_trader = FakePaperTrader()
+    orch = Orchestrator(
+        scanner=FakeScanner([]),
+        hardfilter=FakeHardFilter(pass_mints=set()),
+        enricher=FakeEnricher(),
+        score_engine=FakeScoreEngine(),
+        llm_judge=FakeLLMJudge(),
+        paper_trader=paper_trader,
+        store=store,
+        cfg=cfg,
+    )
+
+    assert orch.paper_trader is paper_trader
+    # Private attribute is preserved unchanged
+    assert orch._paper_trader is paper_trader
+
+
 @pytest.mark.asyncio
 async def test_run_cycle_happy_path(store: Store, cfg: Config) -> None:
     """Scanner returns 2 candidates; hardfilter passes 1; run_cycle returns [signal].
