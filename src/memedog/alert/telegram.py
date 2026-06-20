@@ -14,13 +14,9 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from memedog.clients.base import BaseHTTPClient, DataSourceError
 from memedog.models import Signal
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
