@@ -65,6 +65,7 @@ async def main() -> None:
     except asyncio.CancelledError:
         logger.info("MemeDog Radar: tasks cancelled — shutting down")
     finally:
+        await dex_client.aclose()
         store.close()
         logger.info("MemeDog Radar stopped")
 

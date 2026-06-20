@@ -26,6 +26,8 @@ def scoring_cfg() -> ScoringConfig:
             top10_full_score_at=15,
             top10_zero_score_at=50,
             max_wallet_zero_at=25,
+            holder_count_full_at=500,
+            sniper_zero_at=30,
         ),
         momentum=ScoringMomentumConfig(
             liquidity_full_at=100_000,
@@ -208,6 +210,52 @@ class TestScoreHolders:
         info = HolderInfo(available=True, top10_pct=32.5, max_wallet_pct=None)
         ds = score_holders(info, scoring_cfg)
         assert ds.raw == pytest.approx(50.0)
+
+    def test_high_holder_count_boosts_score(self, scoring_cfg):
+        """holder_count at full_at → sub-metric = 100; above-average score expected."""
+        # holder_count=500 (== holder_count_full_at) → sub-metric=100
+        # top10 and max_wallet are None so only holder_count contributes → raw=100
+        info = HolderInfo(available=True, top10_pct=None, max_wallet_pct=None,
+                          holder_count=500, sniper_pct=None)
+        ds = score_holders(info, scoring_cfg)
+        assert ds.raw == pytest.approx(100.0)
+
+    def test_zero_holder_count_gives_low_sub_score(self, scoring_cfg):
+        """holder_count=0 → sub-metric=0; combined with other Nones → raw=0."""
+        info = HolderInfo(available=True, top10_pct=None, max_wallet_pct=None,
+                          holder_count=0, sniper_pct=None)
+        ds = score_holders(info, scoring_cfg)
+        assert ds.raw == pytest.approx(0.0)
+
+    def test_low_sniper_pct_boosts_score(self, scoring_cfg):
+        """sniper_pct=0 → sub-metric=100 (best case)."""
+        info = HolderInfo(available=True, top10_pct=None, max_wallet_pct=None,
+                          holder_count=None, sniper_pct=0.0)
+        ds = score_holders(info, scoring_cfg)
+        assert ds.raw == pytest.approx(100.0)
+
+    def test_high_sniper_pct_gives_low_score(self, scoring_cfg):
+        """sniper_pct at sniper_zero_at (30) → sub-metric=0."""
+        info = HolderInfo(available=True, top10_pct=None, max_wallet_pct=None,
+                          holder_count=None, sniper_pct=30.0)
+        ds = score_holders(info, scoring_cfg)
+        assert ds.raw == pytest.approx(0.0)
+
+    def test_all_four_metrics_averages_correctly(self, scoring_cfg):
+        """All four sub-metrics present → raw is average of the four scores."""
+        # top10=15 → 100, max_wallet=0 → 100, holder_count=500 → 100, sniper_pct=0 → 100
+        info = HolderInfo(available=True, top10_pct=15.0, max_wallet_pct=0.0,
+                          holder_count=500, sniper_pct=0.0)
+        ds = score_holders(info, scoring_cfg)
+        assert ds.raw == pytest.approx(100.0)
+
+    def test_only_sniper_pct_none_averages_remaining_three(self, scoring_cfg):
+        """With sniper_pct=None, average is over the other three sub-metrics."""
+        # top10=15 → 100, max_wallet=0 → 100, holder_count=500 → 100, sniper_pct=None (skipped)
+        info = HolderInfo(available=True, top10_pct=15.0, max_wallet_pct=0.0,
+                          holder_count=500, sniper_pct=None)
+        ds = score_holders(info, scoring_cfg)
+        assert ds.raw == pytest.approx(100.0)
 
 
 # ---------------------------------------------------------------------------

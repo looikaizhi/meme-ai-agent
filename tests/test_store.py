@@ -201,9 +201,29 @@ def test_update_position_to_closed_removes_from_open(store: Store) -> None:
     assert store.open_positions() == []
 
 
-def test_update_nonexistent_position_is_noop(store: Store) -> None:
-    """update_position on an unknown mint does not raise."""
-    store.update_position("UNKNOWN_MINT", "CLOSED")  # should not raise
+def test_update_nonexistent_position_logs_warning(
+    store: Store, caplog: pytest.LogCaptureFixture
+) -> None:
+    """update_position on an unknown mint does not raise but logs a warning."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="memedog.store"):
+        store.update_position("UNKNOWN_MINT", "CLOSED")  # should not raise
+
+    assert any("UNKNOWN_MINT" in r.message for r in caplog.records), (
+        "Expected a warning mentioning the missing mint"
+    )
+
+
+def test_update_existing_position_works(store: Store) -> None:
+    """update_position on a known mint updates the status without warning."""
+    pos = _make_position(mint="MINT_UPD", status="OPEN")
+    store.save_position(pos)
+
+    store.update_position("MINT_UPD", "CLOSED")
+
+    # Should no longer appear in open positions
+    assert store.open_positions() == []
 
 
 # ---------------------------------------------------------------------------

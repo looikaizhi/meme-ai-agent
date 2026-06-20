@@ -70,6 +70,8 @@ class ScoringHoldersConfig(BaseModel):
     top10_full_score_at: float
     top10_zero_score_at: float
     max_wallet_zero_at: float
+    holder_count_full_at: float
+    sniper_zero_at: float
 
 
 class ScoringMomentumConfig(BaseModel):

@@ -138,21 +138,30 @@ def _position(candidate: TokenCandidate, status: str = "OPEN") -> Position:
 
 def _trade(
     candidate: TokenCandidate,
-    pnl_usd: float,
+    pnl_pct: float,
     exit_reason: str,
     hold_min: float = 45.0,
+    size_usd: float = 100.0,
 ) -> TradeRecord:
+    """Build a TradeRecord with internally consistent financials.
+
+    Parameters
+    ----------
+    pnl_pct:
+        Fraction (e.g. 0.45 means +45%).  Used to derive pnl_usd and exit_price.
+    """
     entry_time = _now() - timedelta(minutes=hold_min + 10)
     exit_time = entry_time + timedelta(minutes=hold_min)
     entry_price = candidate.price_usd
-    exit_price = entry_price * (1 + pnl_usd / 100.0)
+    exit_price = entry_price * (1 + pnl_pct)
+    pnl_usd = size_usd * pnl_pct
     return TradeRecord(
         mint=candidate.mint,
         symbol=candidate.symbol,
         entry_price=entry_price,
         exit_price=exit_price,
         pnl_usd=pnl_usd,
-        pnl_pct=pnl_usd,
+        pnl_pct=pnl_pct,
         exit_reason=exit_reason,
         entry_time=entry_time,
         exit_time=exit_time,
@@ -202,13 +211,14 @@ def seed(db_path: str) -> None:
             pass  # already exists (idempotent guard)
 
     # Closed trades: 2 winners, 1 loser
+    # pnl_pct is a fraction: 0.45 = +45%, -0.18 = -18%
     trade_specs = [
-        (candidates[0], 45.0, "take_profit", 60.0),
-        (candidates[1], 30.0, "take_profit", 45.0),
-        (candidates[2], -18.0, "stop_loss", 25.0),
+        (candidates[0], 0.45, "take_profit", 60.0),
+        (candidates[1], 0.30, "take_profit", 45.0),
+        (candidates[2], -0.18, "stop_loss", 25.0),
     ]
-    for cand, pnl, reason, hold in trade_specs:
-        store.save_trade(_trade(cand, pnl, reason, hold))
+    for cand, pnl_pct, reason, hold in trade_specs:
+        store.save_trade(_trade(cand, pnl_pct, reason, hold))
 
     store.close()
     print(

@@ -182,6 +182,8 @@ def _make_integration_cfg() -> Config:
                 top10_full_score_at=15.0,
                 top10_zero_score_at=50.0,
                 max_wallet_zero_at=25.0,
+                holder_count_full_at=500.0,
+                sniper_zero_at=30.0,
             ),
             momentum=ScoringMomentumConfig(
                 liquidity_full_at=100_000.0,

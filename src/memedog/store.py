@@ -156,12 +156,21 @@ class Store:
         self._conn.commit()
 
     def update_position(self, mint: str, status: str) -> None:
-        """Update the status of a position by mint address."""
-        self._conn.execute(
+        """Update the status of a position by mint address.
+
+        Logs a warning if no row was updated (mint not found).
+        Does not raise — keeps the operation non-fatal.
+        """
+        cursor = self._conn.execute(
             "UPDATE positions SET status = ? WHERE mint = ?",
             (status, mint),
         )
         self._conn.commit()
+        if cursor.rowcount == 0:
+            logger.warning(
+                "update_position: mint %s not found in positions table (no row updated)",
+                mint,
+            )
 
     def open_positions(self) -> list[Position]:
         """Return all positions with status='OPEN'."""

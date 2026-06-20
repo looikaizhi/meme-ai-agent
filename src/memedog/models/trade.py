@@ -1,14 +1,14 @@
 """Trade data contracts."""
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 
 
 class Position(BaseModel):
     mint: str
     symbol: str
     entry_price: float
-    entry_time: datetime
+    entry_time: AwareDatetime
     size_usd: float
     status: str
     take_profit_pct: float
@@ -24,5 +24,5 @@ class TradeRecord(BaseModel):
     pnl_usd: float
     pnl_pct: float
     exit_reason: str
-    entry_time: datetime
-    exit_time: datetime
+    entry_time: AwareDatetime
+    exit_time: AwareDatetime

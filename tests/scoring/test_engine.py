@@ -30,6 +30,8 @@ def scoring_cfg() -> ScoringConfig:
             top10_full_score_at=15,
             top10_zero_score_at=50,
             max_wallet_zero_at=25,
+            holder_count_full_at=500,
+            sniper_zero_at=30,
         ),
         momentum=ScoringMomentumConfig(
             liquidity_full_at=100_000,

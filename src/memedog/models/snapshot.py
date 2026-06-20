@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 
 from memedog.models.candidate import TokenCandidate
 
@@ -50,4 +50,4 @@ class TokenSnapshot(BaseModel):
     holders: HolderInfo
     momentum: MomentumInfo
     social: SocialInfo
-    enriched_at: datetime
+    enriched_at: AwareDatetime

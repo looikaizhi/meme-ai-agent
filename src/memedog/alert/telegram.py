@@ -151,6 +151,6 @@ async def maybe_notify(
         await client.send(text)
         logger.info("Telegram alert sent for %s (%s)", signal.symbol, signal.signal.value)
         return True
-    except DataSourceError as exc:
+    except Exception as exc:
         logger.warning("maybe_notify: failed to send alert: %s", exc)
         return False

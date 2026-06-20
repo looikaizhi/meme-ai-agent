@@ -284,7 +284,8 @@ class TestHardFilterRugCheckFailure:
         assert "rugcheck" in reason.lower() or "unavailable" in reason.lower()
 
     async def test_rugcheck_datasource_error_pass_flagged_mode(self, cfg_pass_flagged):
-        """DataSourceError with on_rugcheck_failure='pass_flagged' → candidate survives."""
+        """DataSourceError with on_rugcheck_failure='pass_flagged' → candidate survives
+        and an audit entry is recorded in hf.flagged."""
         from memedog.hardfilter.hardfilter import HardFilter
 
         candidate = make_candidate(mint="RC_FLAG")
@@ -298,6 +299,8 @@ class TestHardFilterRugCheckFailure:
         assert survivors[0].mint == "RC_FLAG"
         # Must NOT be in dropped
         assert len(hf.dropped) == 0
+        # Must have audit entry in flagged
+        assert ("RC_FLAG", "rugcheck_unavailable_pass_flagged") in hf.flagged
 
 
 class TestHardFilterMultipleCandidates:

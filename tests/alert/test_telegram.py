@@ -212,3 +212,28 @@ class TestMaybeNotify:
         )
         assert result is False
         fake_client.send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_generic_runtime_error_returns_false_no_raise(self):
+        """Any non-CancelledError exception from send must be swallowed → False."""
+        from memedog.alert.telegram import maybe_notify
+
+        cfg = _make_cfg(only_signal="BULLISH", min_confidence=0.6)
+        fake_client = FakeTelegramAlert(raise_error=RuntimeError("unexpected boom"))
+        result = await maybe_notify(
+            _make_signal(signal=SignalType.BULLISH, confidence=0.85), cfg, client=fake_client
+        )
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_cancelled_error_propagates(self):
+        """asyncio.CancelledError must NOT be caught — it must propagate."""
+        import asyncio
+        from memedog.alert.telegram import maybe_notify
+
+        cfg = _make_cfg(only_signal="BULLISH", min_confidence=0.6)
+        fake_client = FakeTelegramAlert(raise_error=asyncio.CancelledError())
+        with pytest.raises(asyncio.CancelledError):
+            await maybe_notify(
+                _make_signal(signal=SignalType.BULLISH, confidence=0.85), cfg, client=fake_client
+            )

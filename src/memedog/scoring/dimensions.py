@@ -94,9 +94,11 @@ def score_safety(info: SafetyInfo, cfg) -> DimensionScore:
 def score_holders(info: HolderInfo, cfg) -> DimensionScore:
     """Score the holders dimension.
 
-    Sub-metrics (each in [0,100]):
+    Sub-metrics (each in [0,100]), averaged over whichever are non-None:
     - top10_pct: lerp(full_at=top10_full_score_at, zero_at=top10_zero_score_at) — lower is better
     - max_wallet_pct: lerp(full_at=0, zero_at=max_wallet_zero_at) — lower is better
+    - holder_count: lerp(full_at=holder_count_full_at, zero_at=0) — more holders → better
+    - sniper_pct: lerp(full_at=0, zero_at=sniper_zero_at) — lower sniper pct → better
 
     Average of available sub-metrics. If none available → neutral + note.
     """
@@ -118,6 +120,18 @@ def score_holders(info: HolderInfo, cfg) -> DimensionScore:
         s = lerp_score(info.max_wallet_pct,
                        full_at=0.0,
                        zero_at=cfg.holders.max_wallet_zero_at)
+        scores.append(s)
+
+    if info.holder_count is not None:
+        s = lerp_score(float(info.holder_count),
+                       full_at=cfg.holders.holder_count_full_at,
+                       zero_at=0.0)
+        scores.append(s)
+
+    if info.sniper_pct is not None:
+        s = lerp_score(info.sniper_pct,
+                       full_at=0.0,
+                       zero_at=cfg.holders.sniper_zero_at)
         scores.append(s)
 
     if not scores:

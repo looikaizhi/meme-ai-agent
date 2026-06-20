@@ -8,11 +8,13 @@ Pipeline:
 
 On DataSourceError from RugCheck:
   - on_rugcheck_failure="drop"         → drop candidate, reason "rugcheck_unavailable"
-  - on_rugcheck_failure="pass_flagged" → keep candidate, note recorded but no crash
+  - on_rugcheck_failure="pass_flagged" → keep candidate, audit entry added to self.flagged
 
 Results:
   - Returns list[TokenCandidate] of survivors.
   - self.dropped: list[tuple[mint: str, reason: str]] reset each apply() call.
+  - self.flagged: list[tuple[mint: str, reason: str]] reset each apply() call;
+    entries added when a candidate is kept despite RugCheck being unavailable.
 """
 from __future__ import annotations
 
@@ -51,14 +53,17 @@ class HardFilter:
         self._rugcheck = rugcheck
         self._cfg = cfg
         self.dropped: list[tuple[str, str]] = []
+        self.flagged: list[tuple[str, str]] = []
 
     async def apply(self, candidates: list[TokenCandidate]) -> list[TokenCandidate]:
         """Run all three rule families; return survivors.
 
         self.dropped is reset at the start of each call so repeated calls
         only reflect the most recent batch.
+        self.flagged records candidates kept despite RugCheck being unavailable.
         """
         self.dropped = []
+        self.flagged = []
         survivors: list[TokenCandidate] = []
 
         for candidate in candidates:
@@ -91,6 +96,7 @@ class HardFilter:
                     logger.warning(
                         "HardFilter PASS_FLAGGED %s: rugcheck unavailable (%s)", mint, exc
                     )
+                    self.flagged.append((mint, "rugcheck_unavailable_pass_flagged"))
                     survivors.append(candidate)
                 else:
                     reason = f"rugcheck_unavailable: {exc}"

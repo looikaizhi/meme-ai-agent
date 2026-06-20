@@ -28,7 +28,7 @@ enricher:
   twitter_lookback_min: 60
 scoring:
   weights: { safety: 0.35, holders: 0.25, momentum: 0.25, social: 0.15 }
-  holders: { top10_full_score_at: 15, top10_zero_score_at: 50, max_wallet_zero_at: 25 }
+  holders: { top10_full_score_at: 15, top10_zero_score_at: 50, max_wallet_zero_at: 25, holder_count_full_at: 500, sniper_zero_at: 30 }
   momentum: { liquidity_full_at: 100000, volume_5m_full_at: 20000 }
   social: { smart_money_full_at: 10, twitter_growth_full_at: 2.0, twitter_growth_zero_at: -1.0 }
   missing_dimension_weight_factor: 0.5

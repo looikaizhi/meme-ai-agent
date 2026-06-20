@@ -186,3 +186,23 @@ class TestLoadConfig:
         assert cfg.scoring.social.smart_money_full_at == yaml_social["smart_money_full_at"]
         assert cfg.scoring.social.twitter_growth_full_at == yaml_social["twitter_growth_full_at"]
         assert cfg.scoring.social.twitter_growth_zero_at == yaml_social["twitter_growth_zero_at"]
+
+    # --- Fix 6: scoring.holders new fields ---
+
+    def test_scoring_holders_new_fields_present(self):
+        """scoring.holders must include holder_count_full_at and sniper_zero_at."""
+        from memedog.config.settings import load_config, ScoringHoldersConfig
+
+        cfg = load_config()
+        assert isinstance(cfg.scoring.holders, ScoringHoldersConfig)
+        assert isinstance(cfg.scoring.holders.holder_count_full_at, float)
+        assert isinstance(cfg.scoring.holders.sniper_zero_at, float)
+
+    def test_scoring_holders_new_fields_match_yaml(self):
+        """New holders scoring thresholds must equal thresholds.yaml values."""
+        from memedog.config.settings import load_config
+
+        cfg = load_config()
+        yaml_holders = _THRESHOLDS["scoring"]["holders"]
+        assert cfg.scoring.holders.holder_count_full_at == yaml_holders["holder_count_full_at"]
+        assert cfg.scoring.holders.sniper_zero_at == yaml_holders["sniper_zero_at"]

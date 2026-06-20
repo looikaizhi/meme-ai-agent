@@ -138,7 +138,7 @@ def main() -> None:
                     "Entry": f"${t.entry_price:.6f}",
                     "Exit": f"${t.exit_price:.6f}",
                     "PnL USD": f"${t.pnl_usd:+.2f}",
-                    "PnL %": f"{t.pnl_pct:+.1f}%",
+                    "PnL %": f"{t.pnl_pct * 100:+.1f}%",
                     "Reason": t.exit_reason,
                     "Entry Time": t.entry_time.strftime("%Y-%m-%d %H:%M"),
                     "Exit Time": t.exit_time.strftime("%Y-%m-%d %H:%M"),
