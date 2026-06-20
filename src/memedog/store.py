@@ -85,6 +85,18 @@ CREATE TABLE IF NOT EXISTS snapshots (
 );
 """
 
+_CREATE_FUNNEL_EVENTS = """
+CREATE TABLE IF NOT EXISTS funnel_events (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts                TEXT NOT NULL,
+    scanned           INTEGER NOT NULL,
+    passed_hardfilter INTEGER NOT NULL,
+    signals           INTEGER NOT NULL,
+    dropped           TEXT NOT NULL,
+    flagged           TEXT NOT NULL
+);
+"""
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -126,6 +138,7 @@ class Store:
         cur.execute(_CREATE_TRADES)
         cur.execute(_CREATE_SIGNALS)
         cur.execute(_CREATE_SNAPSHOTS)
+        cur.execute(_CREATE_FUNNEL_EVENTS)
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -327,6 +340,85 @@ class Store:
             except Exception as exc:
                 logger.warning("skipping corrupt snapshot payload: %s", exc)
         return results
+
+    # ------------------------------------------------------------------
+    # Funnel events
+    # ------------------------------------------------------------------
+
+    def save_funnel_event(
+        self,
+        scanned: int,
+        passed_hardfilter: int,
+        signals: int,
+        dropped: list[tuple[str, str]],
+        flagged: list[tuple[str, str]],
+        ts: "datetime | None" = None,
+    ) -> None:
+        """Store one funnel-event row per pipeline cycle.
+
+        Parameters
+        ----------
+        scanned:
+            Total candidates returned by Scanner.
+        passed_hardfilter:
+            Candidates that survived HardFilter.
+        signals:
+            Number of signals produced in this cycle.
+        dropped:
+            List of (mint, reason) tuples for candidates that were dropped by
+            HardFilter.  Serialized as JSON text.
+        flagged:
+            List of (mint, reason) tuples for candidates kept despite issues
+            (e.g. RugCheck unavailable).  Serialized as JSON text.
+        ts:
+            Timestamp for this event.  Defaults to the current UTC time.
+        """
+        if ts is None:
+            ts = datetime.now(tz=timezone.utc)
+        self._conn.execute(
+            """
+            INSERT INTO funnel_events
+              (ts, scanned, passed_hardfilter, signals, dropped, flagged)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _dt_to_str(ts),
+                scanned,
+                passed_hardfilter,
+                signals,
+                json.dumps(dropped),
+                json.dumps(flagged),
+            ),
+        )
+        self._conn.commit()
+
+    def recent_funnel_events(self, limit: int = 20) -> list[dict]:
+        """Return the most recent N funnel events, newest first.
+
+        Each element is a dict with keys:
+            scanned, passed_hardfilter, signals, dropped, flagged, ts.
+        ``dropped`` and ``flagged`` are decoded back to
+        ``list[tuple[str, str]]``.
+        ``ts`` is a timezone-aware :class:`datetime`.
+        """
+        cur = self._conn.execute(
+            "SELECT * FROM funnel_events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        rows = cur.fetchall()
+        result = []
+        for row in rows:
+            result.append(
+                {
+                    "scanned": row["scanned"],
+                    "passed_hardfilter": row["passed_hardfilter"],
+                    "signals": row["signals"],
+                    "dropped": [tuple(item) for item in json.loads(row["dropped"])],
+                    "flagged": [tuple(item) for item in json.loads(row["flagged"])],
+                    "ts": _str_to_dt(row["ts"]),
+                }
+            )
+        return result
 
     # ------------------------------------------------------------------
     # Lifecycle

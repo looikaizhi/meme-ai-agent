@@ -213,10 +213,12 @@ class FakeHardFilter:
     def __init__(self, pass_mints: set[str]) -> None:
         self._pass = pass_mints
         self.dropped: list[tuple[str, str]] = []
+        self.flagged: list[tuple[str, str]] = []
 
     async def apply(self, candidates: list[TokenCandidate]) -> list[TokenCandidate]:
         survivors = [c for c in candidates if c.mint in self._pass]
         self.dropped = [(c.mint, "test_drop") for c in candidates if c.mint not in self._pass]
+        self.flagged = []
         return survivors
 
 
@@ -534,3 +536,111 @@ async def test_run_forever_stops_on_event(store: Store, cfg: Config) -> None:
 
     # At least one cycle ran
     assert call_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# Tests — funnel event persistence
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_cycle_saves_funnel_event(store: Store, cfg: Config) -> None:
+    """After run_cycle, store.recent_funnel_events() has one event with correct counts.
+
+    Scanner returns 2 candidates; hardfilter passes 1 (mint=MINT_A); 1 signal produced.
+    Funnel event must record: scanned=2, passed_hardfilter=1, signals=1.
+    """
+    from memedog.orchestrator import Orchestrator
+
+    c1 = _make_candidate("MINT_A", price_usd=0.001)
+    c2 = _make_candidate("MINT_B", price_usd=0.002)
+
+    hardfilter = FakeHardFilter(pass_mints={"MINT_A"})  # MINT_B dropped
+
+    orch = Orchestrator(
+        scanner=FakeScanner([c1, c2]),
+        hardfilter=hardfilter,
+        enricher=FakeEnricher(),
+        score_engine=FakeScoreEngine(),
+        llm_judge=FakeLLMJudge(SignalType.BULLISH),
+        paper_trader=FakePaperTrader(),
+        store=store,
+        cfg=cfg,
+    )
+
+    signals = await orch.run_cycle()
+    assert len(signals) == 1  # sanity
+
+    events = store.recent_funnel_events(limit=5)
+    assert len(events) == 1
+
+    ev = events[0]
+    assert ev["scanned"] == 2
+    assert ev["passed_hardfilter"] == 1
+    assert ev["signals"] == 1
+
+
+@pytest.mark.asyncio
+async def test_run_cycle_funnel_event_dropped_list(store: Store, cfg: Config) -> None:
+    """Funnel event records the dropped candidates from hardfilter.dropped."""
+    from memedog.orchestrator import Orchestrator
+
+    c1 = _make_candidate("MINT_P")
+    c2 = _make_candidate("MINT_Q")
+
+    hardfilter = FakeHardFilter(pass_mints=set())  # all dropped
+
+    orch = Orchestrator(
+        scanner=FakeScanner([c1, c2]),
+        hardfilter=hardfilter,
+        enricher=FakeEnricher(),
+        score_engine=FakeScoreEngine(),
+        llm_judge=FakeLLMJudge(),
+        paper_trader=FakePaperTrader(),
+        store=store,
+        cfg=cfg,
+    )
+
+    await orch.run_cycle()
+
+    events = store.recent_funnel_events(limit=5)
+    assert len(events) == 1
+
+    ev = events[0]
+    assert ev["scanned"] == 2
+    assert ev["passed_hardfilter"] == 0
+    assert ev["signals"] == 0
+    # dropped should contain both mints
+    dropped_mints = {mint for mint, _ in ev["dropped"]}
+    assert "MINT_P" in dropped_mints
+    assert "MINT_Q" in dropped_mints
+
+
+@pytest.mark.asyncio
+async def test_run_cycle_funnel_event_no_crash_on_save_failure(
+    store: Store, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failure in save_funnel_event must not abort the cycle or raise."""
+    from memedog.orchestrator import Orchestrator
+
+    def _bad_save(*args, **kwargs):
+        raise RuntimeError("DB write failure simulation")
+
+    monkeypatch.setattr(store, "save_funnel_event", _bad_save)
+
+    c1 = _make_candidate("MINT_R")
+
+    orch = Orchestrator(
+        scanner=FakeScanner([c1]),
+        hardfilter=FakeHardFilter(pass_mints={"MINT_R"}),
+        enricher=FakeEnricher(),
+        score_engine=FakeScoreEngine(),
+        llm_judge=FakeLLMJudge(SignalType.BULLISH),
+        paper_trader=FakePaperTrader(),
+        store=store,
+        cfg=cfg,
+    )
+
+    # Must not raise even though save_funnel_event raises
+    signals = await orch.run_cycle()
+    assert len(signals) == 1  # cycle still completes

@@ -359,3 +359,90 @@ def test_recent_snapshots_logs_and_skips_corrupt_payload(
     assert results == []
     # Warning is logged with the error detail
     assert any("skipping corrupt snapshot payload" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Test: funnel_events round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_save_funnel_event_and_retrieve(store: Store) -> None:
+    """save_funnel_event + recent_funnel_events returns the saved event."""
+    dropped = [("MINT_BAD1", "low_liquidity"), ("MINT_BAD2", "rugcheck_unavailable")]
+    flagged = [("MINT_FLAGGED", "rugcheck_unavailable_pass_flagged")]
+    ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+    store.save_funnel_event(
+        scanned=10,
+        passed_hardfilter=3,
+        signals=2,
+        dropped=dropped,
+        flagged=flagged,
+        ts=ts,
+    )
+
+    events = store.recent_funnel_events(limit=10)
+    assert len(events) == 1
+    ev = events[0]
+
+    # Counts correct
+    assert ev["scanned"] == 10
+    assert ev["passed_hardfilter"] == 3
+    assert ev["signals"] == 2
+
+    # Lists round-trip
+    assert ev["dropped"] == dropped
+    assert ev["flagged"] == flagged
+
+    # Timestamp is timezone-aware and matches
+    assert ev["ts"].tzinfo is not None
+    assert ev["ts"].year == 2025
+    assert ev["ts"].month == 1
+    assert ev["ts"].day == 15
+
+
+def test_save_funnel_event_default_ts(store: Store) -> None:
+    """save_funnel_event without explicit ts uses current UTC time."""
+    before = datetime.now(tz=timezone.utc)
+    store.save_funnel_event(scanned=5, passed_hardfilter=2, signals=1, dropped=[], flagged=[])
+    after = datetime.now(tz=timezone.utc)
+
+    events = store.recent_funnel_events()
+    assert len(events) == 1
+    ts = events[0]["ts"]
+    assert ts.tzinfo is not None
+    assert before <= ts <= after
+
+
+def test_recent_funnel_events_newest_first(store: Store) -> None:
+    """recent_funnel_events returns events newest first (descending by id)."""
+    ts1 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    ts2 = datetime(2025, 1, 2, 0, 0, 0, tzinfo=timezone.utc)
+
+    store.save_funnel_event(scanned=1, passed_hardfilter=0, signals=0, dropped=[], flagged=[], ts=ts1)
+    store.save_funnel_event(scanned=5, passed_hardfilter=3, signals=2, dropped=[], flagged=[], ts=ts2)
+
+    events = store.recent_funnel_events(limit=10)
+    assert len(events) == 2
+    # Newest (ts2) is first
+    assert events[0]["scanned"] == 5
+    assert events[1]["scanned"] == 1
+
+
+def test_recent_funnel_events_limit(store: Store) -> None:
+    """recent_funnel_events(limit=N) returns at most N events."""
+    for i in range(5):
+        store.save_funnel_event(
+            scanned=i, passed_hardfilter=0, signals=0, dropped=[], flagged=[]
+        )
+
+    events = store.recent_funnel_events(limit=3)
+    assert len(events) == 3
+
+
+def test_funnel_event_empty_lists(store: Store) -> None:
+    """dropped and flagged empty lists round-trip correctly."""
+    store.save_funnel_event(scanned=0, passed_hardfilter=0, signals=0, dropped=[], flagged=[])
+    events = store.recent_funnel_events()
+    assert events[0]["dropped"] == []
+    assert events[0]["flagged"] == []

@@ -34,6 +34,33 @@ def main() -> None:
         layout="wide",
     )
 
+    # ------------------------------------------------------------------
+    # Auto-refresh: use st.autorefresh when available (Streamlit >= 1.28),
+    # otherwise fall back to a sidebar refresh-interval control + st.rerun().
+    # All import and invocation is guarded so the app never crashes on older
+    # Streamlit installs.
+    # ------------------------------------------------------------------
+    _REFRESH_DEFAULT_SEC = 30
+    if hasattr(st, "autorefresh"):
+        # streamlit-autorefresh or Streamlit >= 1.28 native
+        try:
+            refresh_sec = st.sidebar.number_input(
+                "Auto-refresh interval (s)",
+                min_value=5,
+                max_value=300,
+                value=_REFRESH_DEFAULT_SEC,
+                step=5,
+                key="_autorefresh_interval",
+            )
+            st.autorefresh(interval=int(refresh_sec) * 1000, key="_dashboard_autorefresh")
+        except Exception:
+            pass  # autorefresh not supported on this build — continue silently
+    else:
+        # Fallback: sidebar manual-refresh button
+        st.sidebar.markdown("**Auto-refresh**")
+        if st.sidebar.button("Refresh now", key="_manual_refresh"):
+            st.rerun()
+
     st.title("🐕 MemeDog Radar — Signal Dashboard")
 
     # ------------------------------------------------------------------
@@ -150,22 +177,63 @@ def main() -> None:
             st.info("No closed trades yet.")
 
         # ------------------------------------------------------------------
-        # Section 3: Candidate funnel
+        # Section 3: Candidate funnel (driven by store.recent_funnel_events)
         # ------------------------------------------------------------------
         st.header("3. Candidate Funnel")
 
-        snapshots = store.recent_snapshots(limit=200)
-        num_snapshots = len(snapshots)
-        num_signals = len(signals)
+        funnel_events = store.recent_funnel_events(limit=20)
 
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Snapshots (enriched candidates)", str(num_snapshots))
-        col_b.metric("Signals generated", str(num_signals))
-        col_c.metric("Conversion rate", f"{(num_signals / num_snapshots * 100):.1f}%" if num_snapshots else "—")
+        if not funnel_events:
+            st.info(
+                "No funnel events recorded yet.  "
+                "Run the pipeline (python -m memedog) to populate this section."
+            )
+        else:
+            # Latest cycle metrics
+            latest = funnel_events[0]
+            col_a, col_b, col_c, col_d = st.columns(4)
+            col_a.metric("Scanned (latest cycle)", str(latest["scanned"]))
+            col_b.metric("Passed HardFilter", str(latest["passed_hardfilter"]))
+            col_c.metric("Signals produced", str(latest["signals"]))
+            conversion = (
+                f"{latest['signals'] / latest['scanned'] * 100:.1f}%"
+                if latest["scanned"] > 0
+                else "—"
+            )
+            col_d.metric("Conversion", conversion)
 
-        st.caption(
-            "Funnel stages: Scanner → HardFilter → Enricher (snapshots) → ScoreEngine → LLMJudge (signals)"
-        )
+            st.caption(
+                f"Latest cycle: {latest['ts'].strftime('%Y-%m-%d %H:%M:%S UTC')}  |  "
+                "Funnel: Scanner → HardFilter → Enricher → ScoreEngine → LLMJudge"
+            )
+
+            # Table of dropped candidates (flattened from recent events)
+            dropped_rows = []
+            for ev in funnel_events:
+                ts_str = ev["ts"].strftime("%H:%M:%S")
+                for mint, reason in ev["dropped"]:
+                    dropped_rows.append(
+                        {"Time": ts_str, "Mint": mint[:12] + "..." if len(mint) > 12 else mint, "Rule Hit": reason}
+                    )
+
+            st.subheader("Dropped Candidates (recent cycles)")
+            if dropped_rows:
+                st.dataframe(pd.DataFrame(dropped_rows), use_container_width=True)
+            else:
+                st.info("No candidates were dropped in the last 20 cycles.")
+
+            # Table of flagged candidates
+            flagged_rows = []
+            for ev in funnel_events:
+                ts_str = ev["ts"].strftime("%H:%M:%S")
+                for mint, reason in ev["flagged"]:
+                    flagged_rows.append(
+                        {"Time": ts_str, "Mint": mint[:12] + "..." if len(mint) > 12 else mint, "Flag": reason}
+                    )
+
+            if flagged_rows:
+                st.subheader("Flagged Candidates (passed with caveats)")
+                st.dataframe(pd.DataFrame(flagged_rows), use_container_width=True)
 
         # ------------------------------------------------------------------
         # Section 4: Config snapshot

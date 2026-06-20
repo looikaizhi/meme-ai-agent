@@ -151,6 +151,22 @@ class Orchestrator:
                 # Continue processing remaining candidates
 
         logger.info("Cycle complete: %d signal(s) produced", len(signals))
+
+        # Step 4 — Record funnel event (non-fatal: a persistence failure must not
+        # abort the cycle or change its return value).
+        try:
+            dropped = list(getattr(self._hardfilter, "dropped", []))
+            flagged = list(getattr(self._hardfilter, "flagged", []))
+            self._store.save_funnel_event(
+                scanned=len(candidates),
+                passed_hardfilter=len(survivors),
+                signals=len(signals),
+                dropped=dropped,
+                flagged=flagged,
+            )
+        except Exception as funnel_exc:
+            logger.warning("Failed to save funnel event: %s", funnel_exc)
+
         return signals
 
     async def run_forever(self, stop_event: Optional[asyncio.Event] = None) -> None:
