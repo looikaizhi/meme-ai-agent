@@ -89,7 +89,21 @@ class LLMJudge:
             return (self._injected_provider, model_name)
 
         from memedog.llm.provider import make_provider
-        return make_provider(self._cfg.models[role])
+
+        # Honor the configured Codex settings (bin / timeout / sandbox) instead of
+        # CodexCLIProvider defaults. make_provider only uses the injected codex
+        # instance for "codex:" model strings; litellm strings ignore it.
+        codex_provider = None
+        codex_cfg = getattr(self._cfg, "codex", None)
+        if codex_cfg is not None:
+            from memedog.llm.codex_provider import CodexCLIProvider
+
+            codex_provider = CodexCLIProvider(
+                codex_bin=codex_cfg.bin,
+                timeout=codex_cfg.timeout_sec,
+                sandbox=codex_cfg.sandbox,
+            )
+        return make_provider(self._cfg.models[role], codex=codex_provider)
 
     async def judge(self, snapshot: TokenSnapshot, score: Score) -> Signal:
         """Run the Bull/Bear debate and produce a Signal.

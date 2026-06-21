@@ -2,8 +2,8 @@
 
 The Codex CLI is invoked as::
 
-    codex exec --sandbox read-only --ask-for-approval never
-               --skip-git-repo-check --output-last-message <tmpfile>
+    codex exec --sandbox read-only --skip-git-repo-check
+               --output-last-message <tmpfile>
                [--model <model>]  # omitted when model is empty
                "<flattened prompt>"
 
@@ -72,7 +72,6 @@ class CodexCLIProvider:
             self._bin,
             "exec",
             "--sandbox", self._sandbox,
-            "--ask-for-approval", "never",
             "--skip-git-repo-check",
             "--output-last-message", tmp_path,
         ]

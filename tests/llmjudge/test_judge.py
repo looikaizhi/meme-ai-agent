@@ -290,3 +290,23 @@ async def test_judge_degrade_confidence_in_range():
         judge = LLMJudge(cfg=_make_fake_cfg(), provider=_ErrorProvider())
         result = await judge.judge(_make_snapshot(), _make_score(total=total))
         assert 0.0 <= result.confidence <= 1.0, f"total={total} gave confidence={result.confidence}"
+
+
+def test_judge_honors_codex_config_bin_timeout():
+    """LLMJudge (non-injected) must build CodexCLIProvider from cfg.codex,
+    not from CodexCLIProvider defaults — so bin/timeout/sandbox are configurable."""
+    from memedog.config import load_config
+    from memedog.llm.codex_provider import CodexCLIProvider
+
+    cfg = load_config().llmjudge
+    cfg.codex.bin = "my-custom-codex"
+    cfg.codex.timeout_sec = 99
+    cfg.codex.sandbox = "read-only"
+
+    judge = LLMJudge(cfg)  # no injected provider → production make_provider path
+    provider, model = judge._get_provider_and_model("bull")
+
+    assert isinstance(provider, CodexCLIProvider)
+    assert provider._bin == "my-custom-codex"
+    assert provider._timeout == 99
+    assert model == ""  # codex:default → empty model name

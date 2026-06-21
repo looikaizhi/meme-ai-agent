@@ -164,6 +164,8 @@ async def test_codex_provider_command_structure(monkeypatch):
     assert "--sandbox" in captured_cmd
     idx = captured_cmd.index("--sandbox")
     assert captured_cmd[idx + 1] == "read-only"
-    assert "--ask-for-approval" in captured_cmd
+    # codex-cli 0.141.0 `exec` is non-interactive by default; --ask-for-approval
+    # is NOT a valid flag for `exec` and must not be passed.
+    assert "--ask-for-approval" not in captured_cmd
     assert "--skip-git-repo-check" in captured_cmd
     assert "--output-last-message" in captured_cmd
