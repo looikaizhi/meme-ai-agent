@@ -30,6 +30,8 @@ where = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = ["live: hits real external APIs; needs keys; run with -m live"]
+addopts = "-m 'not live'"
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml", "*.txt"]
