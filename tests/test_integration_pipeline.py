@@ -99,14 +99,18 @@ class FakeDexScreenerClient:
 # ---------------------------------------------------------------------------
 
 _CLEAN_RUGCHECK_REPORT = {
-    "mintAuthority": None,       # revoked
-    "freezeAuthority": None,     # revoked
-    "markets": [{"lpBurned": True}],  # LP burned
-    "topHolders": [{"pct": 3.0}] * 8,  # 8 holders × 3% = 24% top10
-    "largestWalletPct": 3.5,
-    "insiders": {"devPct": 2.0, "sniperPct": 5.0},
-    "score": 88,
-    "riskLevel": "low",
+    "mintAuthority": None,        # revoked
+    "freezeAuthority": None,      # revoked
+    "markets": [{"lp": {"lpLockedPct": 100}}],  # LP fully locked → lp_burned_or_locked=True
+    "topHolders": [
+        {"address": f"addr{i}", "pct": 3.0, "uiAmount": 100, "owner": f"owner{i}", "insider": False}
+        for i in range(8)
+    ],  # 8 holders × 3% = 24% top10
+    "token": {"supply": 1_000_000_000, "decimals": 6, "mintAuthority": None, "freezeAuthority": None},
+    "creator": "creatorIntegration",
+    "creatorBalance": 20_000_000,  # dev_pct = 2%
+    "score_normalised": 12,        # trust = 88, risk_level = "LOW"
+    "rugged": False,
 }
 
 

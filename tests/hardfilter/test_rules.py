@@ -385,8 +385,8 @@ class TestCheckHoldersFail:
         assert passed is False
         assert "sniper" in reason.lower()
 
-    def test_none_top10_pct_fails(self, holders_cfg):
-        """None value → can't verify → fail."""
+    def test_none_top10_pct_with_good_max_wallet_passes(self, holders_cfg):
+        """top10_pct=None but max_wallet_pct present and good → passes (skips top10 check)."""
         from memedog.hardfilter.rules import check_holders
 
         passed, reason = check_holders(
@@ -396,10 +396,39 @@ class TestCheckHoldersFail:
             sniper_pct=20.0,
             cfg=holders_cfg,
         )
-        assert passed is False
-        assert "top10" in reason.lower() or "top_10" in reason.lower() or "top 10" in reason.lower() or "unknown" in reason.lower()
+        assert passed is True
+        assert reason == ""
 
-    def test_none_dev_pct_fails(self, holders_cfg):
+    def test_none_max_wallet_pct_with_good_top10_passes(self, holders_cfg):
+        """max_wallet_pct=None but top10_pct present and good → passes (skips max_wallet check)."""
+        from memedog.hardfilter.rules import check_holders
+
+        passed, reason = check_holders(
+            top10_pct=30.0,
+            max_wallet_pct=None,
+            dev_pct=5.0,
+            sniper_pct=20.0,
+            cfg=holders_cfg,
+        )
+        assert passed is True
+        assert reason == ""
+
+    def test_both_concentration_metrics_none_fails_unassessable(self, holders_cfg):
+        """Both top10_pct and max_wallet_pct None → cannot assess → fail with 'holders_unassessable'."""
+        from memedog.hardfilter.rules import check_holders
+
+        passed, reason = check_holders(
+            top10_pct=None,
+            max_wallet_pct=None,
+            dev_pct=5.0,
+            sniper_pct=20.0,
+            cfg=holders_cfg,
+        )
+        assert passed is False
+        assert "unassessable" in reason.lower() or "holders_unassessable" in reason.lower()
+
+    def test_none_dev_pct_is_skipped_not_failed(self, holders_cfg):
+        """dev_pct=None → metric skipped, does not cause failure."""
         from memedog.hardfilter.rules import check_holders
 
         passed, reason = check_holders(
@@ -409,4 +438,47 @@ class TestCheckHoldersFail:
             sniper_pct=20.0,
             cfg=holders_cfg,
         )
+        assert passed is True
+        assert reason == ""
+
+    def test_none_sniper_pct_is_skipped_not_failed(self, holders_cfg):
+        """sniper_pct=None → metric skipped, does not cause failure."""
+        from memedog.hardfilter.rules import check_holders
+
+        passed, reason = check_holders(
+            top10_pct=30.0,
+            max_wallet_pct=15.0,
+            dev_pct=5.0,
+            sniper_pct=None,
+            cfg=holders_cfg,
+        )
+        assert passed is True
+        assert reason == ""
+
+    def test_all_metrics_none_fails_unassessable(self, holders_cfg):
+        """All metrics None → cannot assess concentration → fail."""
+        from memedog.hardfilter.rules import check_holders
+
+        passed, reason = check_holders(
+            top10_pct=None,
+            max_wallet_pct=None,
+            dev_pct=None,
+            sniper_pct=None,
+            cfg=holders_cfg,
+        )
         assert passed is False
+        assert "unassessable" in reason.lower() or "holders_unassessable" in reason.lower()
+
+    def test_present_exceeding_metric_still_fails_when_other_is_none(self, holders_cfg):
+        """top10_pct=None, max_wallet_pct exceeds threshold → should still fail on max_wallet."""
+        from memedog.hardfilter.rules import check_holders
+
+        passed, reason = check_holders(
+            top10_pct=None,
+            max_wallet_pct=25.0,  # >= max_single_wallet_pct=20.0 → fail
+            dev_pct=5.0,
+            sniper_pct=20.0,
+            cfg=holders_cfg,
+        )
+        assert passed is False
+        assert "wallet" in reason.lower() or "single" in reason.lower()

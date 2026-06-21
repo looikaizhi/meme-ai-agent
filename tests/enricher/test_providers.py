@@ -80,13 +80,27 @@ class TestFetchSafety:
         assert result.rug_risk_level == "low"
 
     async def test_no_report_fetches_via_client(self):
-        """When no pre-fetched report, calls rugcheck_client.get_token_report."""
+        """When no pre-fetched report, calls rugcheck_client.get_token_report.
+
+        Uses real RugCheck API schema: score_normalised (RISK score, higher=riskier)
+        is used to derive trust_score (100 - score_normalised) and risk_level.
+        score_normalised=30 → trust=70, risk_level='MEDIUM'.
+        """
         from memedog.enricher.providers import fetch_safety
         from memedog.clients.rugcheck import parse_report
 
         mock_client = AsyncMock()
         mock_client.get_token_report = AsyncMock(
-            return_value={"score": 70, "riskLevel": "medium"}
+            return_value={
+                "mintAuthority": None,
+                "freezeAuthority": None,
+                "score_normalised": 30,  # RISK score; trust = 100-30 = 70
+                "rugged": False,
+                "markets": [],
+                "topHolders": [],
+                "token": {"supply": 1_000_000, "decimals": 6},
+                "creatorBalance": 0,
+            }
         )
 
         result = await fetch_safety(
@@ -98,7 +112,7 @@ class TestFetchSafety:
         mock_client.get_token_report.assert_called_once_with("MINT123")
         assert result.available is True
         assert result.rug_trust_score == 70
-        assert result.rug_risk_level == "medium"
+        assert result.rug_risk_level == "MEDIUM"
 
     async def test_client_error_returns_unavailable(self):
         """If rugcheck_client raises, return SafetyInfo(available=False)."""

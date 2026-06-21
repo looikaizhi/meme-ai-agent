@@ -115,48 +115,56 @@ def check_holders(
 ) -> tuple[bool, str]:
     """Check holder concentration metrics against configuration thresholds.
 
-    Rules (in order, fail fast):
-    1. top10_pct <= max_top10_pct
-    2. max_wallet_pct < max_single_wallet_pct   (strict <)
-    3. dev_pct < max_dev_pct                    (strict <)
-    4. sniper_pct < max_sniper_pct              (strict <)
+    Concentration assessability requirement:
+    - At least one of (top10_pct, max_wallet_pct) must be present (non-None).
+    - If BOTH are None → cannot assess concentration at all → fail with
+      reason "holders_unassessable".
 
-    None values for any metric → treat as fail (can't verify).
+    Rules for present metrics (None → skip, not fail):
+    1. top10_pct <= max_top10_pct            (if top10_pct is not None)
+    2. max_wallet_pct < max_single_wallet_pct (strict <, if not None)
+    3. dev_pct < max_dev_pct                 (strict <, if not None)
+    4. sniper_pct < max_sniper_pct           (strict <, if not None)
+
+    Rationale: dev_pct/sniper_pct may be genuinely unavailable (e.g. no
+    creatorBalance field in response) and should not auto-drop an otherwise
+    clean candidate.  However, if we cannot assess ANY concentration metric
+    we cannot make a safety judgement → drop.
     """
-    # Rule 1: top-10 concentration (<=)
-    if top10_pct is None:
-        return (False, "holders:top10_pct is unknown (None)")
-    if top10_pct > cfg.max_top10_pct:
-        return (
-            False,
-            f"holders:top10_pct={top10_pct} > max={cfg.max_top10_pct}",
-        )
+    # Guard: require at least one concentration metric
+    if top10_pct is None and max_wallet_pct is None:
+        return (False, "holders_unassessable: both top10_pct and max_wallet_pct are None")
 
-    # Rule 2: single wallet (strict <)
-    if max_wallet_pct is None:
-        return (False, "holders:max_wallet_pct is unknown (None)")
-    if max_wallet_pct >= cfg.max_single_wallet_pct:
-        return (
-            False,
-            f"holders:single_wallet_pct={max_wallet_pct} >= max={cfg.max_single_wallet_pct}",
-        )
+    # Rule 1: top-10 concentration (<=) — skip if None
+    if top10_pct is not None:
+        if top10_pct > cfg.max_top10_pct:
+            return (
+                False,
+                f"holders:top10_pct={top10_pct} > max={cfg.max_top10_pct}",
+            )
 
-    # Rule 3: dev (strict <)
-    if dev_pct is None:
-        return (False, "holders:dev_pct is unknown (None)")
-    if dev_pct >= cfg.max_dev_pct:
-        return (
-            False,
-            f"holders:dev_pct={dev_pct} >= max={cfg.max_dev_pct}",
-        )
+    # Rule 2: single wallet (strict <) — skip if None
+    if max_wallet_pct is not None:
+        if max_wallet_pct >= cfg.max_single_wallet_pct:
+            return (
+                False,
+                f"holders:single_wallet_pct={max_wallet_pct} >= max={cfg.max_single_wallet_pct}",
+            )
 
-    # Rule 4: sniper (strict <)
-    if sniper_pct is None:
-        return (False, "holders:sniper_pct is unknown (None)")
-    if sniper_pct >= cfg.max_sniper_pct:
-        return (
-            False,
-            f"holders:sniper_pct={sniper_pct} >= max={cfg.max_sniper_pct}",
-        )
+    # Rule 3: dev (strict <) — skip if None
+    if dev_pct is not None:
+        if dev_pct >= cfg.max_dev_pct:
+            return (
+                False,
+                f"holders:dev_pct={dev_pct} >= max={cfg.max_dev_pct}",
+            )
+
+    # Rule 4: sniper (strict <) — skip if None
+    if sniper_pct is not None:
+        if sniper_pct >= cfg.max_sniper_pct:
+            return (
+                False,
+                f"holders:sniper_pct={sniper_pct} >= max={cfg.max_sniper_pct}",
+            )
 
     return (True, "")

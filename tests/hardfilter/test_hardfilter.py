@@ -133,19 +133,24 @@ def cfg_pass_flagged() -> HardFilterConfig:
 class TestHardFilterCleanCandidate:
     async def test_clean_candidate_is_kept(self, cfg):
         """A candidate that passes momentum + clean rugcheck report must survive."""
-        from memedog.hardfilter.hardfilter import HardFilter
         from memedog.clients.rugcheck import parse_report
+        from memedog.hardfilter.hardfilter import HardFilter
 
         candidate = make_candidate(mint="GOOD_MINT")
+        # Use real RugCheck API schema: lp sub-object with lpLockedPct >= 90
         raw_report = {
             "mintAuthority": None,
             "freezeAuthority": None,
-            "markets": [{"lpBurned": True, "lpLocked": False}],
-            "topHolders": [{"pct": 2.5}] * 10,
-            "largestWalletPct": 10.0,
-            "insiders": {"devPct": 4.0, "sniperPct": 15.0},
-            "score": 90,
-            "riskLevel": "low",
+            "markets": [{"lp": {"lpLockedPct": 100}}],
+            "topHolders": [
+                {"address": f"addr{i}", "pct": 2.5, "uiAmount": 100, "owner": f"owner{i}", "insider": False}
+                for i in range(10)
+            ],
+            "token": {"supply": 1_000_000_000, "decimals": 6, "mintAuthority": None, "freezeAuthority": None},
+            "creator": "creatorX",
+            "creatorBalance": 40_000_000,  # 4%
+            "score_normalised": 10,
+            "rugged": False,
         }
         fake_rc = FakeRugCheck(reports={"GOOD_MINT": raw_report})
 
@@ -201,12 +206,16 @@ class TestHardFilterAuthorityDrop:
         raw_report = {
             "mintAuthority": "SomeActiveKey",
             "freezeAuthority": None,
-            "markets": [{"lpBurned": True, "lpLocked": False}],
-            "topHolders": [{"pct": 2.5}] * 10,
-            "largestWalletPct": 10.0,
-            "insiders": {"devPct": 4.0, "sniperPct": 15.0},
-            "score": 50,
-            "riskLevel": "medium",
+            "markets": [{"lp": {"lpLockedPct": 100}}],
+            "topHolders": [
+                {"address": f"addr{i}", "pct": 2.5, "uiAmount": 100, "owner": f"owner{i}", "insider": False}
+                for i in range(10)
+            ],
+            "token": {"supply": 1_000_000_000, "decimals": 6, "mintAuthority": "SomeActiveKey", "freezeAuthority": None},
+            "creator": "creatorX",
+            "creatorBalance": 40_000_000,
+            "score_normalised": 50,
+            "rugged": False,
         }
         fake_rc = FakeRugCheck(reports={"MINT_ACTIVE": raw_report})
 
@@ -225,12 +234,16 @@ class TestHardFilterAuthorityDrop:
         raw_report = {
             "mintAuthority": None,
             "freezeAuthority": None,
-            "markets": [{"lpBurned": False, "lpLocked": False}],
-            "topHolders": [{"pct": 2.5}] * 10,
-            "largestWalletPct": 10.0,
-            "insiders": {"devPct": 4.0, "sniperPct": 15.0},
-            "score": 60,
-            "riskLevel": "medium",
+            "markets": [{"lp": {"lpLockedPct": 0}}],  # not locked
+            "topHolders": [
+                {"address": f"addr{i}", "pct": 2.5, "uiAmount": 100, "owner": f"owner{i}", "insider": False}
+                for i in range(10)
+            ],
+            "token": {"supply": 1_000_000_000, "decimals": 6, "mintAuthority": None, "freezeAuthority": None},
+            "creator": "creatorX",
+            "creatorBalance": 40_000_000,
+            "score_normalised": 60,
+            "rugged": False,
         }
         fake_rc = FakeRugCheck(reports={"LP_BAD": raw_report})
 
@@ -250,12 +263,16 @@ class TestHardFilterHoldersDrop:
         raw_report = {
             "mintAuthority": None,
             "freezeAuthority": None,
-            "markets": [{"lpBurned": True, "lpLocked": False}],
-            "topHolders": [{"pct": 4.0}] * 10,  # sum = 40 > 35
-            "largestWalletPct": 10.0,
-            "insiders": {"devPct": 4.0, "sniperPct": 15.0},
-            "score": 70,
-            "riskLevel": "medium",
+            "markets": [{"lp": {"lpLockedPct": 100}}],
+            "topHolders": [
+                {"address": f"addr{i}", "pct": 4.0, "uiAmount": 100, "owner": f"owner{i}", "insider": False}
+                for i in range(10)
+            ],  # sum = 40 > 35
+            "token": {"supply": 1_000_000_000, "decimals": 6, "mintAuthority": None, "freezeAuthority": None},
+            "creator": "creatorX",
+            "creatorBalance": 40_000_000,
+            "score_normalised": 70,
+            "rugged": False,
         }
         fake_rc = FakeRugCheck(reports={"HIGH_CONC": raw_report})
 
@@ -315,22 +332,30 @@ class TestHardFilterMultipleCandidates:
         good_report = {
             "mintAuthority": None,
             "freezeAuthority": None,
-            "markets": [{"lpBurned": True, "lpLocked": False}],
-            "topHolders": [{"pct": 2.5}] * 10,
-            "largestWalletPct": 10.0,
-            "insiders": {"devPct": 4.0, "sniperPct": 15.0},
-            "score": 90,
-            "riskLevel": "low",
+            "markets": [{"lp": {"lpLockedPct": 100}}],
+            "topHolders": [
+                {"address": f"addr{i}", "pct": 2.5, "uiAmount": 100, "owner": f"owner{i}", "insider": False}
+                for i in range(10)
+            ],
+            "token": {"supply": 1_000_000_000, "decimals": 6, "mintAuthority": None, "freezeAuthority": None},
+            "creator": "creatorX",
+            "creatorBalance": 40_000_000,
+            "score_normalised": 10,
+            "rugged": False,
         }
         bad_auth_report = {
             "mintAuthority": "SomeActiveKey",
             "freezeAuthority": None,
-            "markets": [{"lpBurned": True, "lpLocked": False}],
-            "topHolders": [{"pct": 2.5}] * 10,
-            "largestWalletPct": 10.0,
-            "insiders": {"devPct": 4.0, "sniperPct": 15.0},
-            "score": 50,
-            "riskLevel": "medium",
+            "markets": [{"lp": {"lpLockedPct": 100}}],
+            "topHolders": [
+                {"address": f"addr{i}", "pct": 2.5, "uiAmount": 100, "owner": f"owner{i}", "insider": False}
+                for i in range(10)
+            ],
+            "token": {"supply": 1_000_000_000, "decimals": 6, "mintAuthority": "SomeActiveKey", "freezeAuthority": None},
+            "creator": "creatorX",
+            "creatorBalance": 40_000_000,
+            "score_normalised": 50,
+            "rugged": False,
         }
         fake_rc = FakeRugCheck(reports={"GOOD": good_report, "BAD_AUTH": bad_auth_report})
 
