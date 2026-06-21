@@ -1,7 +1,8 @@
 """Tests for TelegramAlert and maybe_notify.
 
-Strategy: inject a fake async client; no real network calls.
-Tests are written before implementation (TDD - red first).
+Fixture-driven tests load real captured responses from tests/fixtures/telegram/
+via the `fixture` pytest helper from conftest.py.
+Other tests use a fake async client or respx inline mocks; no real network calls.
 """
 from __future__ import annotations
 
@@ -73,12 +74,47 @@ class FakeTelegramAlert:
 
 
 # ---------------------------------------------------------------------------
-# TelegramAlert.send tests
+# TelegramAlert.send tests — fixture-driven (real captured response bodies)
 # ---------------------------------------------------------------------------
 
 
 class TestTelegramAlertSend:
-    """Unit-tests for TelegramAlert.send using respx mock."""
+    """Unit-tests for TelegramAlert.send using respx mock with real fixture bodies."""
+
+    @pytest.mark.asyncio
+    async def test_send_returns_true_on_200_real_fixture(self, fixture):
+        """Serve real send_ok.json (ok:true, message_id:239); assert send returns True."""
+        import respx
+        import httpx
+        from memedog.alert.telegram import TelegramAlert
+
+        send_ok = fixture("telegram/send_ok.json")
+
+        async with respx.MockRouter() as router:
+            router.post("https://api.telegram.org/botTOKEN/sendMessage").mock(
+                return_value=httpx.Response(200, json=send_ok)
+            )
+            client = TelegramAlert(bot_token="TOKEN", chat_id="CHAT", max_retries=1, backoff_base=0)
+            result = await client.send("hello")
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_send_raises_datasource_error_on_403_real_fixture(self, fixture):
+        """Serve real send_forbidden.json with HTTP 403; assert DataSourceError raised."""
+        import respx
+        import httpx
+        from memedog.alert.telegram import TelegramAlert
+        from memedog.clients.base import DataSourceError
+
+        send_forbidden = fixture("telegram/send_forbidden.json")
+
+        async with respx.MockRouter() as router:
+            router.post("https://api.telegram.org/botTOKEN/sendMessage").mock(
+                return_value=httpx.Response(403, json=send_forbidden)
+            )
+            client = TelegramAlert(bot_token="TOKEN", chat_id="CHAT", max_retries=1, backoff_base=0)
+            with pytest.raises(DataSourceError):
+                await client.send("hello")
 
     @pytest.mark.asyncio
     async def test_send_returns_true_on_200(self):
@@ -111,11 +147,68 @@ class TestTelegramAlertSend:
 
 
 # ---------------------------------------------------------------------------
-# maybe_notify tests
+# maybe_notify tests — fixture-driven for HTTP path, inline for gating tests
 # ---------------------------------------------------------------------------
 
 
 class TestMaybeNotify:
+
+    @pytest.mark.asyncio
+    async def test_real_fixture_send_ok_returns_true(self, fixture):
+        """maybe_notify with valid BULLISH signal serves real send_ok.json → True."""
+        import respx
+        import httpx
+        from memedog.alert.telegram import TelegramAlert, maybe_notify
+
+        send_ok = fixture("telegram/send_ok.json")
+        cfg = _make_cfg(only_signal="BULLISH", min_confidence=0.6)
+        sig = _make_signal(signal=SignalType.BULLISH, confidence=0.85)
+
+        async with respx.MockRouter() as router:
+            router.post(
+                f"https://api.telegram.org/bot{cfg.settings.telegram_bot_token}/sendMessage"
+            ).mock(return_value=httpx.Response(200, json=send_ok))
+            # Use a real TelegramAlert so the HTTP path is exercised
+            client = TelegramAlert(
+                bot_token=cfg.settings.telegram_bot_token,
+                chat_id=cfg.settings.telegram_chat_id,
+                max_retries=1,
+                backoff_base=0,
+            )
+            result = await maybe_notify(sig, cfg, client=client)
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_real_fixture_forbidden_returns_false(self, fixture):
+        """maybe_notify with forbidden response (send_forbidden.json, HTTP 403)
+        → send raises DataSourceError → maybe_notify returns False (no raise)."""
+        import respx
+        import httpx
+        from memedog.alert.telegram import TelegramAlert, maybe_notify
+
+        send_forbidden = fixture("telegram/send_forbidden.json")
+        cfg = _make_cfg(only_signal="BULLISH", min_confidence=0.6)
+        sig = _make_signal(signal=SignalType.BULLISH, confidence=0.85)
+
+        async with respx.MockRouter() as router:
+            router.post(
+                f"https://api.telegram.org/bot{cfg.settings.telegram_bot_token}/sendMessage"
+            ).mock(return_value=httpx.Response(403, json=send_forbidden))
+            client = TelegramAlert(
+                bot_token=cfg.settings.telegram_bot_token,
+                chat_id=cfg.settings.telegram_chat_id,
+                max_retries=1,
+                backoff_base=0,
+            )
+            # Should NOT raise; DataSourceError is swallowed by maybe_notify
+            result = await maybe_notify(sig, cfg, client=client)
+
+        assert result is False
+
+    # ------------------------------------------------------------------
+    # Gating tests — no fixtures needed (no HTTP calls made)
+    # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
     async def test_disabled_returns_false_no_send(self):

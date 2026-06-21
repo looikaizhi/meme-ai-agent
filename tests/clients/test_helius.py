@@ -1,7 +1,12 @@
 """Task 1 — Tests for HeliusClient.
 
-RED phase: all tests must fail until HeliusClient is implemented.
 Uses respx to mock HTTP; no real network calls.
+Fixture-driven tests load real captured responses from tests/fixtures/helius/
+via the `fixture` pytest helper from conftest.py.
+
+HeliusClient posts to an absolute RPC URL (self._rpc_url).
+respx is mounted on mainnet.helius-rpc.com.
+api_key="testkey" when constructing the client (no real key needed; respx intercepts).
 """
 from __future__ import annotations
 
@@ -59,6 +64,72 @@ ERROR_RESPONSE = {
 
 
 class TestGetLargestHolders:
+    # ------------------------------------------------------------------
+    # Fixture-driven tests (real captured responses)
+    # ------------------------------------------------------------------
+
+    async def test_real_fixture_ok_returns_floats_in_range(self, fixture):
+        """Serve real largest_accounts_ok.json; assert top10_pct and max_wallet_pct
+        are floats in (0, 100] and holder_count == len(value)."""
+        from memedog.clients.helius import HeliusClient
+
+        ok_data = fixture("helius/largest_accounts_ok.json")
+        expected_count = len(ok_data["result"]["value"])
+
+        with respx.mock:
+            respx.post(BASE_URL).mock(
+                return_value=httpx.Response(200, json=ok_data)
+            )
+            async with HeliusClient(api_key=API_KEY) as client:
+                result = await client.get_largest_holders(MINT)
+
+        assert isinstance(result["top10_pct"], float)
+        assert 0 < result["top10_pct"] <= 100
+        assert isinstance(result["max_wallet_pct"], float)
+        assert 0 < result["max_wallet_pct"] <= 100
+        assert result["holder_count"] == expected_count
+
+    async def test_real_fixture_overloaded_returns_all_none(self, fixture):
+        """Serve real largest_accounts_overloaded.json (RPC -32603 error);
+        assert get_largest_holders returns all-None for the overloaded path."""
+        from memedog.clients.helius import HeliusClient
+
+        overloaded_data = fixture("helius/largest_accounts_overloaded.json")
+
+        with respx.mock:
+            respx.post(BASE_URL).mock(
+                return_value=httpx.Response(200, json=overloaded_data)
+            )
+            async with HeliusClient(api_key=API_KEY) as client:
+                result = await client.get_largest_holders(MINT)
+
+        # The -32603 error path must degrade gracefully
+        assert result["top10_pct"] is None
+        assert result["max_wallet_pct"] is None
+        assert result["holder_count"] is None
+
+    async def test_real_fixture_empty_accounts_returns_zero_count(self, fixture):
+        """Serve real largest_accounts_empty.json (value: []); assert holder_count==0
+        and pcts are None (no supply to compute percentages from)."""
+        from memedog.clients.helius import HeliusClient
+
+        empty_data = fixture("helius/largest_accounts_empty.json")
+
+        with respx.mock:
+            respx.post(BASE_URL).mock(
+                return_value=httpx.Response(200, json=empty_data)
+            )
+            async with HeliusClient(api_key=API_KEY) as client:
+                result = await client.get_largest_holders(MINT)
+
+        assert result["holder_count"] == 0
+        assert result["top10_pct"] is None
+        assert result["max_wallet_pct"] is None
+
+    # ------------------------------------------------------------------
+    # Synthetic / inline tests (kept for edge-case coverage)
+    # ------------------------------------------------------------------
+
     async def test_top10_pct_and_max_wallet_computed_correctly(self):
         """With 4 accounts totaling 100, top10=100%, max_wallet=50%."""
         from memedog.clients.helius import HeliusClient

@@ -1,7 +1,8 @@
 """Task 2 — Tests for TwitterClient.
 
-RED phase: all tests must fail until TwitterClient is implemented.
 Uses respx to mock HTTP; no real network calls.
+Fixture-driven tests load real/documented-shape responses from tests/fixtures/twitter/
+via the `fixture` pytest helper from conftest.py.
 
 Design decision documented here:
   - If bearer_token is None, count_mentions raises DataSourceError
@@ -71,6 +72,36 @@ class TestNoBearer:
 
 
 class TestWithBearer:
+    async def test_fixture_counts_sample_returns_mentions_and_growth(self, fixture):
+        """Serve twitter/counts_sample.json (documented-shape sample, not live-captured).
+
+        NOTE: The fixture body has a _note key explaining it is a documented-shape
+        sample because no live X API key was available for capture. Shape follows
+        X API v2 /2/tweets/counts/recent.
+
+        Fixture: 2 buckets (tweet_count=12, tweet_count=30), meta.total=42.
+        Assert: mentions_1h == 42 (meta.total_tweet_count).
+        Assert: growth computed from 2 buckets = (last - first) / max(first, 1) * 100.
+        """
+        from memedog.clients.twitter import TwitterClient
+
+        # Load the documented-shape sample fixture
+        # Body has _note key (which the Twitter API ignores / client should handle)
+        counts_data = fixture("twitter/counts_sample.json")
+
+        with respx.mock:
+            respx.get("https://api.twitter.com/2/tweets/counts/recent").mock(
+                return_value=httpx.Response(200, json=counts_data)
+            )
+            async with TwitterClient(bearer_token=BEARER) as client:
+                result = await client.count_mentions(QUERY, LOOKBACK_MIN)
+
+        # meta.total_tweet_count == 42
+        assert result["mentions_1h"] == 42
+        # growth = (30 - 12) / max(12, 1) * 100 = 150.0
+        expected_growth = (30 - 12) / max(12, 1) * 100
+        assert result["growth"] == pytest.approx(expected_growth, rel=1e-3)
+
     async def test_returns_total_mentions_count(self):
         """With valid bearer and mocked response, returns total from meta."""
         from memedog.clients.twitter import TwitterClient

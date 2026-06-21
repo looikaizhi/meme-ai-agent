@@ -1,24 +1,19 @@
 """Tests for RugCheckClient and parse_report.
 
 Tests use respx to mock HTTP; no real network calls.
-parse_report tests load the real BONK fixture (tests/fixtures/rugcheck_bonk.json)
+parse_report tests load real captured fixtures from tests/fixtures/rugcheck/
 to assert against verified live-API field names and values.
 """
 from __future__ import annotations
-
-import json
-import pathlib
 
 import httpx
 import pytest
 import respx
 
 # ---------------------------------------------------------------------------
-# Load real BONK fixture
+# Real fixture bodies are loaded via the `fixture` pytest fixture from conftest.
+# (Path: tests/fixtures/rugcheck/report_bonk.json)
 # ---------------------------------------------------------------------------
-
-_FIXTURE_PATH = pathlib.Path(__file__).parent.parent / "fixtures" / "rugcheck_bonk.json"
-BONK_REPORT = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
 
 # ---------------------------------------------------------------------------
 # Synthetic fixtures for edge-case tests
@@ -72,24 +67,42 @@ RUGGED_REPORT: dict = {
 
 
 # ---------------------------------------------------------------------------
-# get_token_report — network layer (unchanged behavior)
+# get_token_report — network layer
 # ---------------------------------------------------------------------------
 
 
 class TestGetTokenReport:
-    async def test_returns_parsed_json_for_valid_mint(self):
+    async def test_returns_parsed_json_for_valid_mint(self, fixture):
+        """Serve real report_bonk.json; assert known stable fields."""
         from memedog.clients.rugcheck import RugCheckClient
 
+        bonk_report = fixture("rugcheck/report_bonk.json")
         mint = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
         with respx.mock:
             respx.get(f"https://api.rugcheck.xyz/v1/tokens/{mint}/report").mock(
-                return_value=httpx.Response(200, json=BONK_REPORT)
+                return_value=httpx.Response(200, json=bonk_report)
             )
             async with RugCheckClient() as client:
                 result = await client.get_token_report(mint)
 
         assert result["mint"] == mint
         assert result["score"] == 101
+
+    async def test_raises_datasource_error_on_400_invalid_mint(self, fixture):
+        """Serve real report_notfound.json body with HTTP 400; assert DataSourceError raised."""
+        from memedog.clients.base import DataSourceError
+        from memedog.clients.rugcheck import RugCheckClient
+
+        notfound_body = fixture("rugcheck/report_notfound.json")
+        # Use the invalid mint from the captured fixture
+        mint = "11111111111111111111111111111111"
+        with respx.mock:
+            respx.get(f"https://api.rugcheck.xyz/v1/tokens/{mint}/report").mock(
+                return_value=httpx.Response(400, json=notfound_body)
+            )
+            async with RugCheckClient(max_retries=1) as client:
+                with pytest.raises(DataSourceError):
+                    await client.get_token_report(mint)
 
     async def test_raises_datasource_error_on_404(self):
         from memedog.clients.base import DataSourceError
@@ -119,85 +132,98 @@ class TestGetTokenReport:
 
 
 # ---------------------------------------------------------------------------
-# parse_report — BONK real-data assertions
+# parse_report — BONK real-data assertions (fixture-driven)
 # ---------------------------------------------------------------------------
 
 
 class TestParseReportBonk:
-    """Assert against values verified live against api.rugcheck.xyz (BONK token)."""
+    """Assert against values verified live against api.rugcheck.xyz (BONK token).
 
-    def test_mint_authority_revoked_true(self):
+    Body loaded from tests/fixtures/rugcheck/report_bonk.json (real captured).
+    """
+
+    def test_mint_authority_revoked_true(self, fixture):
         """BONK mintAuthority is null → revoked = True."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["mint_authority_revoked"] is True
 
-    def test_freeze_authority_revoked_true(self):
+    def test_freeze_authority_revoked_true(self, fixture):
         """BONK freezeAuthority is null → revoked = True."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["freeze_authority_revoked"] is True
 
-    def test_trust_score_equals_93(self):
+    def test_trust_score_equals_93(self, fixture):
         """BONK score_normalised=7 → trust = 100-7 = 93."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["trust_score"] == 93
 
-    def test_risk_level_low(self):
+    def test_risk_level_low(self, fixture):
         """BONK score_normalised=7 → risk_level 'LOW'."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["risk_level"] == "LOW"
 
-    def test_lp_burned_or_locked_false(self):
+    def test_lp_burned_or_locked_false(self, fixture):
         """BONK lpLockedPct=0 → lp_burned_or_locked = False."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["lp_burned_or_locked"] is False
 
-    def test_max_wallet_pct_approx(self):
+    def test_max_wallet_pct_approx(self, fixture):
         """BONK largest holder pct ≈ 7.951234087754192."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["max_wallet_pct"] == pytest.approx(7.951234087754192)
 
-    def test_top10_pct_sum(self):
+    def test_top10_pct_sum(self, fixture):
         """top10_pct = sum of first 10 holders from BONK fixture."""
         from memedog.clients.rugcheck import parse_report
 
-        expected = sum(h["pct"] for h in BONK_REPORT["topHolders"][:10])
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        expected = sum(h["pct"] for h in bonk_report["topHolders"][:10])
+        result = parse_report(bonk_report)
         assert result["top10_pct"] == pytest.approx(expected)
 
-    def test_sniper_pct_zero(self):
+    def test_sniper_pct_zero(self, fixture):
         """BONK has no insider holders → sniper_pct == 0.0."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["sniper_pct"] == pytest.approx(0.0)
 
-    def test_dev_pct_small_positive(self):
+    def test_dev_pct_small_positive(self, fixture):
         """BONK creatorBalance=14608186413, supply=8799471848022988767 → tiny dev_pct."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         assert result["dev_pct"] is not None
         expected = 14608186413 / 8799471848022988767 * 100
         assert result["dev_pct"] == pytest.approx(expected)
         assert 0 < result["dev_pct"] < 1  # very small percentage
 
-    def test_all_keys_present(self):
+    def test_all_keys_present(self, fixture):
         """All nine output keys must be present regardless of input."""
         from memedog.clients.rugcheck import parse_report
 
-        result = parse_report(BONK_REPORT)
+        bonk_report = fixture("rugcheck/report_bonk.json")
+        result = parse_report(bonk_report)
         required_keys = {
             "mint_authority_revoked",
             "freeze_authority_revoked",
@@ -210,6 +236,27 @@ class TestParseReportBonk:
             "risk_level",
         }
         assert required_keys == set(result.keys())
+
+
+# ---------------------------------------------------------------------------
+# parse_report — concentrated real-fixture test
+# ---------------------------------------------------------------------------
+
+
+class TestParseReportConcentrated:
+    """Assert against real report_concentrated.json fixture."""
+
+    def test_top10_pct_above_40(self, fixture):
+        """Real concentrated token: top10_pct > 40 (first holder alone holds 71.9%)."""
+        from memedog.clients.rugcheck import parse_report
+
+        concentrated = fixture("rugcheck/report_concentrated.json")
+        result = parse_report(concentrated)
+        # The real fixture has a single holder with 71.9% — top10 sum far exceeds 40
+        assert result["top10_pct"] is not None
+        assert result["top10_pct"] > 40, (
+            f"Expected top10_pct > 40 for concentrated token, got {result['top10_pct']}"
+        )
 
 
 # ---------------------------------------------------------------------------
