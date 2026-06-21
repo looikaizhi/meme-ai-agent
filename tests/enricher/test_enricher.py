@@ -16,6 +16,12 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
+# Real fixture for pre-fetched rugcheck report test
+from tests.conftest import load_fixture as _load_fixture
+from memedog.clients.rugcheck import parse_report as _parse_report
+
+_REPORT_BONK_PARSED = _parse_report(_load_fixture("rugcheck/report_bonk.json"))
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -188,20 +194,13 @@ class TestEnricherPartialFailure:
         assert snapshot is not None
 
     async def test_pre_fetched_rugcheck_report_used_for_safety(self):
-        """When rugcheck_report passed to enrich(), used directly for safety."""
-        from memedog.enricher.enricher import Enricher
+        """When rugcheck_report passed to enrich(), used directly for safety.
 
-        parsed_report = {
-            "mint_authority_revoked": True,
-            "freeze_authority_revoked": True,
-            "lp_burned_or_locked": True,
-            "top10_pct": 15.0,
-            "max_wallet_pct": 4.0,
-            "dev_pct": 1.0,
-            "sniper_pct": 2.0,
-            "trust_score": 95,
-            "risk_level": "low",
-        }
+        Uses the REAL parsed report_bonk.json fixture instead of a hand-crafted dict.
+        BONK real values: trust_score=93 (score_normalised=7 → 100-7=93), risk_level='LOW',
+        mint_authority_revoked=True, freeze_authority_revoked=True, lp_burned_or_locked=False.
+        """
+        from memedog.enricher.enricher import Enricher
 
         enricher = Enricher(
             rugcheck_client=FakeRugCheckClient(),
@@ -210,10 +209,15 @@ class TestEnricherPartialFailure:
             cfg=make_enricher_cfg(),
         )
 
-        snapshot = await enricher.enrich(make_candidate(), rugcheck_report=parsed_report)
+        # Pass the REAL pre-parsed BONK report fixture
+        snapshot = await enricher.enrich(make_candidate(), rugcheck_report=_REPORT_BONK_PARSED)
 
-        assert snapshot.safety.rug_trust_score == 95
-        assert snapshot.safety.rug_risk_level == "low"
+        # Verify real BONK fixture values are reflected in SafetyInfo
+        assert snapshot.safety.rug_trust_score == 93   # 100 - score_normalised(7)
+        assert snapshot.safety.rug_risk_level == "LOW"
+        assert snapshot.safety.mint_authority_revoked is True
+        assert snapshot.safety.freeze_authority_revoked is True
+        assert snapshot.safety.lp_burned_or_locked is False  # real BONK: lpLockedPct=0
 
 
 class TestEnricherTimeout:

@@ -18,6 +18,12 @@ from memedog.clients.base import DataSourceError
 from memedog.config.settings import ScannerConfig
 from memedog.models import TokenCandidate
 
+# Load real fixtures at module level for use in fixture-based tests
+from tests.conftest import load_fixture as _load_fixture
+
+_BONK_PAIRS = _load_fixture("dexscreener/tokens_bonk.json")["pairs"]
+_TOKEN_PROFILES = _load_fixture("dexscreener/token_profiles_latest.json")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -671,3 +677,182 @@ class TestAwareDatetimeEnforcement:
                 price_change_5m=5.2,
                 trace_id="trace-001",
             )
+
+
+# ---------------------------------------------------------------------------
+# Real fixture tests — BONK pairs + token_profiles_latest addresses
+# ---------------------------------------------------------------------------
+
+
+class TestRealFixtureData:
+    """Tests that drive the scanner with REAL captured DexScreener data."""
+
+    def _patch_pair_age(self, pair: dict, age_min: float = 30.0) -> dict:
+        """Return a shallow copy of pair with pairCreatedAt set to age_min minutes ago.
+
+        The real BONK pairs are 2+ years old, so we rewrite pairCreatedAt so
+        the prefilter age-window check passes.  All other fields are real.
+        """
+        now_ms = int(time.time() * 1000)
+        patched = dict(pair)
+        patched["pairCreatedAt"] = now_ms - int(age_min * 60 * 1000)
+        return patched
+
+    async def test_real_token_profiles_addresses_used_as_fetch_latest(self):
+        """fetch_latest_token_addresses returns real addresses from token_profiles_latest.json.
+
+        Verifies the client can return all 30 real addresses and the scanner
+        calls get_token_pairs for each one (or filters them if chain doesn't match).
+        """
+        from memedog.scanner.scanner import Scanner
+
+        real_addresses = [p["tokenAddress"] for p in _TOKEN_PROFILES]
+        assert len(real_addresses) == 30  # fixture has exactly 30 entries
+
+        # All addresses are Solana and Base; Scanner config is solana-only.
+        # For each address we return no pairs so the scan silently skips them.
+        client = make_fake_client(
+            addresses=real_addresses,
+            pairs_by_mint={},  # no pairs → no candidates
+        )
+        cfg = make_scanner_config(chain="solana")
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        # No pairs returned → no candidates; but fetch_latest was called
+        assert results == []
+        client.fetch_latest_token_addresses.assert_called_once_with("solana")
+        # get_token_pairs was called for every address
+        assert client.get_token_pairs.call_count == len(real_addresses)
+
+    async def test_real_bonk_pairs_parsed_to_token_candidates(self):
+        """Real BONK pairs from tokens_bonk.json drive the scanner.
+
+        BONK pairs are old (2024) so we patch pairCreatedAt to pass the age window.
+        All pairs are solana → the scanner's chain filter accepts them.
+        The scanner picks the highest-liquidity pair; if that pair is missing
+        priceChange.m5 (a real-world gap in the fixture), conversion fails and
+        the scanner logs a warning + returns [].  We assert that outcome directly.
+        The test also verifies the schema key that causes the skip.
+        """
+        from memedog.scanner.scanner import Scanner
+
+        bonk_mint = _BONK_PAIRS[0]["baseToken"]["address"]  # DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
+        assert bonk_mint == "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+
+        # Patch pairCreatedAt so pairs fall inside the age window
+        patched_pairs = [self._patch_pair_age(p, age_min=30.0) for p in _BONK_PAIRS]
+
+        # The highest-liquidity BONK pair (BrMYU1…) has no priceChange.m5 in the
+        # real fixture — this is a schema gap in captured data, not a code bug.
+        highest_liq_pair = max(
+            (p for p in patched_pairs if p.get("chainId") == "solana"),
+            key=lambda p: p.get("liquidity", {}).get("usd", 0),
+        )
+        assert "m5" not in highest_liq_pair.get("priceChange", {}), (
+            "Fixture changed: highest-liquidity pair now has m5. Update test assertions."
+        )
+
+        client = make_fake_client(
+            addresses=[bonk_mint],
+            pairs_by_mint={bonk_mint: patched_pairs},
+        )
+        cfg = make_scanner_config(
+            min_pair_age_min=5,
+            max_pair_age_min=360,
+            prefilter_min_liquidity_usd=1_000.0,
+            prefilter_min_volume_5m=0.0,
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        # Scanner picks highest-liq pair, fails conversion (missing priceChange.m5),
+        # logs a warning, and returns [] — correct graceful-degradation behaviour.
+        assert results == [], (
+            "Expected [] because the highest-liquidity BONK pair lacks priceChange.m5"
+        )
+
+    async def test_real_bonk_full_schema_pair_converts(self):
+        """A real BONK pair that has all required fields converts to a TokenCandidate.
+
+        We take the first BONK pair (6oFWm7…), which has priceChange.m5, and verify
+        the scanner maps every field correctly from the real fixture data.
+        """
+        from memedog.scanner.scanner import Scanner
+
+        bonk_mint = _BONK_PAIRS[0]["baseToken"]["address"]
+
+        # Pick the first pair which has the complete schema (including priceChange.m5)
+        first_pair = _BONK_PAIRS[0]
+        assert "m5" in first_pair.get("priceChange", {}), (
+            "First BONK pair expected to have priceChange.m5 — fixture may have changed."
+        )
+        patched = self._patch_pair_age(first_pair, age_min=30.0)
+
+        client = make_fake_client(
+            addresses=[bonk_mint],
+            pairs_by_mint={bonk_mint: [patched]},
+        )
+        cfg = make_scanner_config(
+            min_pair_age_min=5,
+            max_pair_age_min=360,
+            prefilter_min_liquidity_usd=1_000.0,
+            prefilter_min_volume_5m=0.0,
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        tc = results[0]
+        assert isinstance(tc, TokenCandidate)
+        assert tc.mint == bonk_mint
+        assert tc.symbol == "Bonk"
+        assert tc.chain == "solana"
+        assert tc.pair_address == first_pair["pairAddress"]
+        assert tc.price_usd == pytest.approx(float(first_pair["priceUsd"]), rel=1e-4)
+        assert tc.liquidity_usd == pytest.approx(first_pair["liquidity"]["usd"], rel=1e-4)
+        assert tc.fdv_usd == pytest.approx(float(first_pair["fdv"]), rel=1e-4)
+        assert tc.volume_5m == pytest.approx(first_pair["volume"]["m5"], rel=1e-4)
+        assert tc.volume_1h == pytest.approx(first_pair["volume"]["h1"], rel=1e-4)
+        assert tc.txns_5m_buys == first_pair["txns"]["m5"]["buys"]
+        assert tc.txns_5m_sells == first_pair["txns"]["m5"]["sells"]
+        assert tc.price_change_5m == pytest.approx(first_pair["priceChange"]["m5"], rel=1e-4)
+        assert isinstance(tc.pair_created_at, datetime)
+        assert tc.pair_created_at.tzinfo is not None
+
+    async def test_real_profiles_chain_filtering(self):
+        """token_profiles_latest.json contains non-solana entries (base, bsc).
+
+        Scanner must skip those — returning pairs marked base/bsc — and only produce
+        candidates for solana pairs.  Uses a constructed pair for a known non-solana
+        address to verify the filtering path.
+        """
+        from memedog.scanner.scanner import Scanner
+
+        # Get a known non-solana address from the real fixture
+        non_solana = [p for p in _TOKEN_PROFILES if p["chainId"] != "solana"]
+        assert len(non_solana) >= 1, "Fixture must contain at least one non-solana entry"
+        non_sol_addr = non_solana[0]["tokenAddress"]
+
+        # Give it a pair on "base" (wrong chain) — should be skipped
+        base_pair = make_raw_pair(
+            address=non_sol_addr,
+            pair_address="PAIR_BASE_001",
+            chain_id="base",
+            liquidity_usd=50_000.0,
+            volume_m5=500.0,
+            age_min=20.0,
+        )
+
+        client = make_fake_client(
+            addresses=[non_sol_addr],
+            pairs_by_mint={non_sol_addr: [base_pair]},
+        )
+        cfg = make_scanner_config(chain="solana")
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        # The non-solana pair must be filtered out
+        assert results == []

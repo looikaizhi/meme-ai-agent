@@ -53,6 +53,13 @@ from memedog.scanner.scanner import Scanner
 from memedog.scoring.engine import ScoreEngine
 from memedog.store import Store
 
+# Real captured fixtures for LLM FakeProvider
+from tests.conftest import load_fixture as _load_fixture
+
+_BULL_TEXT = _load_fixture("codex/bull_argument.txt")
+_BEAR_TEXT = _load_fixture("codex/bear_argument.txt")
+_JUDGE_BULLISH = _load_fixture("codex/judge_bullish.json")   # dict: signal=BULLISH, confidence=0.78
+
 
 # ---------------------------------------------------------------------------
 # Fake DexScreener client — returns 2 raw pair dicts
@@ -259,7 +266,7 @@ def store(db_path: str) -> Store:
 # ---------------------------------------------------------------------------
 
 def _judge_json(signal="BULLISH", confidence=0.82):
-    """Return a valid JudgeOut JSON string."""
+    """Return a valid JudgeOut JSON string (constructed; used for degradation test)."""
     return json.dumps({
         "signal": signal,
         "confidence": confidence,
@@ -305,11 +312,14 @@ async def test_full_pipeline_e2e(store: Store) -> None:
     # --- Real ScoreEngine ---
     score_engine = ScoreEngine(cfg=cfg.scoring)
 
-    # --- Real LLMJudge with FakeProvider (bull text, bear text, judge JSON) ---
-    bull_text = "Bull case: strong momentum, clean rug check, smart money entering."
-    bear_text = "Bear case: market could dump, high FDV risk."
-    judge_json = _judge_json(signal="BULLISH", confidence=0.82)
-    fake_provider = FakeProvider([bull_text, bear_text, judge_json])
+    # --- Real LLMJudge with FakeProvider using REAL captured codex fixtures ---
+    # FakeProvider call order: idx=0 → bull, idx=1 → bear, idx=2 → judge
+    # (asyncio.gather runs bull+bear concurrently; judge is called after)
+    fake_provider = FakeProvider([
+        _BULL_TEXT,                          # real codex bull argument (~2KB)
+        _BEAR_TEXT,                          # real codex bear argument (~2.5KB)
+        json.dumps(_JUDGE_BULLISH),          # real codex JudgeOut: BULLISH, confidence=0.78
+    ])
     llm_judge = LLMJudge(cfg=cfg.llmjudge, provider=fake_provider)
 
     # --- Real PaperTrader ---
@@ -339,10 +349,10 @@ async def test_full_pipeline_e2e(store: Store) -> None:
     good_signals = [s for s in signals if s.mint == "MINT_GOOD"]
     assert len(good_signals) == 1, "Expected exactly 1 signal for MINT_GOOD"
 
-    # It should be BULLISH with high confidence
+    # It should be BULLISH with confidence from real judge_bullish.json fixture (0.78)
     sig = good_signals[0]
     assert sig.signal == SignalType.BULLISH
-    assert sig.confidence == pytest.approx(0.82)
+    assert sig.confidence == pytest.approx(0.78)  # from real codex/judge_bullish.json
     assert sig.symbol == "GOODDOG"
 
     # store.recent_signals() is non-empty
@@ -354,7 +364,7 @@ async def test_full_pipeline_e2e(store: Store) -> None:
     assert len(stored_snaps) >= 1
     assert stored_snaps[0].candidate.mint == "MINT_GOOD"
 
-    # A paper position was opened (BULLISH + confidence 0.82 >= 0.5 threshold)
+    # A paper position was opened (BULLISH + confidence 0.78 >= 0.5 entry threshold)
     open_pos = store.open_positions()
     assert len(open_pos) >= 1, "Expected at least one open paper position"
     assert open_pos[0].mint == "MINT_GOOD"
@@ -377,11 +387,12 @@ async def test_bad_pair_does_not_produce_signal(store: Store) -> None:
     )
     score_engine = ScoreEngine(cfg=cfg.scoring)
 
-    # FakeProvider must have enough responses for the one good candidate (3 calls)
+    # FakeProvider uses real captured fixtures for the one good candidate (3 calls)
+    # idx=0 → bull, idx=1 → bear, idx=2 → judge (real BULLISH fixture)
     fake_provider = FakeProvider([
-        "Bull case text",
-        "Bear case text",
-        _judge_json("BULLISH", 0.78),
+        _BULL_TEXT,
+        _BEAR_TEXT,
+        json.dumps(_JUDGE_BULLISH),
     ])
     llm_judge = LLMJudge(cfg=cfg.llmjudge, provider=fake_provider)
     paper_trader = PaperTrader(store=store, cfg=cfg.papertrader)

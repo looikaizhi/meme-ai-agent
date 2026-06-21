@@ -1,5 +1,6 @@
 """Tests for CodexCLIProvider (Task 2). Never spawns a real codex process."""
 import asyncio
+import json
 import os
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,21 +21,23 @@ def _make_fake_proc(returncode: int, stdout: bytes = b"", stderr: bytes = b""):
 
 
 # ---------------------------------------------------------------------------
-# Success path
+# Success path — uses real captured codex output (judge_bullish.json)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_codex_provider_success_path(monkeypatch, tmp_path):
-    """Provider reads from --output-last-message file and returns stripped text."""
-    expected_text = "BULLISH analysis here"
+async def test_codex_provider_success_path(monkeypatch, fixture):
+    """Provider reads --output-last-message file and returns stripped real codex output."""
+    # Use the real captured codex JudgeOut fixture as the subprocess output
+    real_judge_out = fixture("codex/judge_bullish.json")  # parsed dict
+    expected_text = json.dumps(real_judge_out)  # the raw JSON string codex would write
 
     async def fake_subprocess(*cmd, **kwargs):
         # Find the --output-last-message file path in the command
         cmd_list = list(cmd)
         idx = cmd_list.index("--output-last-message")
         out_file = cmd_list[idx + 1]
-        # Write the expected output to that file
+        # Write the real fixture content (with surrounding whitespace to test stripping)
         with open(out_file, "w", encoding="utf-8") as f:
             f.write(f"  {expected_text}  \n")
         return _make_fake_proc(returncode=0)
@@ -46,7 +49,12 @@ async def test_codex_provider_success_path(monkeypatch, tmp_path):
         model="gpt-4o",
         messages=[{"role": "user", "content": "analyze this token"}],
     )
+    # complete() strips leading/trailing whitespace, so result == expected_text
     assert result == expected_text
+    # Verify the real fixture fields are present in the returned JSON
+    parsed = json.loads(result)
+    assert parsed["signal"] == "BULLISH"
+    assert parsed["confidence"] == 0.78
 
 
 @pytest.mark.asyncio

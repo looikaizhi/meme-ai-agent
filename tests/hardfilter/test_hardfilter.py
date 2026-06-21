@@ -18,6 +18,12 @@ from memedog.config.settings import (
 )
 from memedog.models import TokenCandidate
 
+# Real fixture data loaded at module level
+from tests.conftest import load_fixture as _load_fixture
+
+_REPORT_BONK_RAW = _load_fixture("rugcheck/report_bonk.json")
+_REPORT_CONCENTRATED_RAW = _load_fixture("rugcheck/report_concentrated.json")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -383,3 +389,197 @@ class TestHardFilterMultipleCandidates:
         # Second call with no candidates → dropped must be empty
         await hf.apply([])
         assert len(hf.dropped) == 0
+
+
+# ---------------------------------------------------------------------------
+# Real fixture tests — report_bonk.json (kept) + report_concentrated.json (dropped)
+# ---------------------------------------------------------------------------
+
+
+class TestHardFilterRealFixtures:
+    """Tests using REAL captured RugCheck reports.
+
+    BONK (report_bonk.json) parsed values:
+      mint_authority_revoked=True, freeze_authority_revoked=True,
+      lp_burned_or_locked=False (lpLockedPct=0 — real BONK data),
+      top10_pct≈45.8%, max_wallet_pct≈7.95%, dev_pct≈0%, sniper_pct=0.
+
+    Config to PASS bonk: require_lp_burned_or_locked=False, max_top10_pct=50.
+
+    CONCENTRATED (report_concentrated.json) parsed values:
+      mint_authority_revoked=True, freeze_authority_revoked=True,
+      lp_burned_or_locked=True,
+      top10_pct≈131.2% (first holder alone holds 71.9%).
+
+    Any max_top10_pct < 131 will DROP the concentrated token.
+    """
+
+    def _make_bonk_cfg(self) -> HardFilterConfig:
+        """Config that accepts BONK: LP check off, top10 threshold 50%."""
+        return HardFilterConfig(
+            authority=AuthorityFilterConfig(
+                require_mint_revoked=True,
+                require_freeze_revoked=True,
+                require_lp_burned_or_locked=False,  # BONK has lpLockedPct=0
+            ),
+            holders=HoldersFilterConfig(
+                max_top10_pct=50.0,       # BONK top10 ≈ 45.8%, < 50
+                max_single_wallet_pct=20.0,  # BONK max_wallet ≈ 7.95%, < 20
+                max_dev_pct=10.0,            # BONK dev_pct ≈ 0%, < 10
+                max_sniper_pct=30.0,         # BONK sniper_pct = 0, < 30
+            ),
+            momentum=MomentumFilterConfig(
+                min_liquidity_usd=20_000.0,
+                min_volume_5m=1_000.0,
+                min_buy_sell_ratio_5m=1.0,
+                max_fdv_to_liquidity=50.0,
+            ),
+            on_rugcheck_failure="drop",
+        )
+
+    def _make_conc_cfg(self) -> HardFilterConfig:
+        """Standard config; concentrated token's top10 (131%) will fail."""
+        return HardFilterConfig(
+            authority=AuthorityFilterConfig(
+                require_mint_revoked=True,
+                require_freeze_revoked=True,
+                require_lp_burned_or_locked=False,  # concentrated token has LP locked; irrelevant
+            ),
+            holders=HoldersFilterConfig(
+                max_top10_pct=35.0,         # 131% >> 35 → FAIL
+                max_single_wallet_pct=20.0,
+                max_dev_pct=10.0,
+                max_sniper_pct=30.0,
+            ),
+            momentum=MomentumFilterConfig(
+                min_liquidity_usd=20_000.0,
+                min_volume_5m=1_000.0,
+                min_buy_sell_ratio_5m=1.0,
+                max_fdv_to_liquidity=50.0,
+            ),
+            on_rugcheck_failure="drop",
+        )
+
+    async def test_bonk_report_passes_hardfilter(self):
+        """report_bonk.json → candidate KEPT with appropriate config (LP check off, top10<50)."""
+        from memedog.hardfilter.hardfilter import HardFilter
+
+        bonk_mint = _REPORT_BONK_RAW["mint"]
+        # Momentum-passing candidate for BONK's mint
+        candidate = make_candidate(
+            mint=bonk_mint,
+            liquidity_usd=25_000.0,
+            volume_5m=2_000.0,
+            txns_5m_buys=20,
+            txns_5m_sells=10,
+        )
+        fake_rc = FakeRugCheck(reports={bonk_mint: _REPORT_BONK_RAW})
+
+        hf = HardFilter(rugcheck=fake_rc, cfg=self._make_bonk_cfg())
+        survivors = await hf.apply([candidate])
+
+        assert len(survivors) == 1, (
+            f"Expected BONK to pass, dropped with: {hf.dropped}"
+        )
+        assert survivors[0].mint == bonk_mint
+        assert len(hf.dropped) == 0
+
+    async def test_concentrated_report_drops_candidate(self):
+        """report_concentrated.json → candidate DROPPED because top10_pct > 35%."""
+        from memedog.hardfilter.hardfilter import HardFilter
+
+        conc_mint = _REPORT_CONCENTRATED_RAW["mint"]
+        candidate = make_candidate(
+            mint=conc_mint,
+            liquidity_usd=25_000.0,
+            volume_5m=2_000.0,
+            txns_5m_buys=20,
+            txns_5m_sells=10,
+        )
+        fake_rc = FakeRugCheck(reports={conc_mint: _REPORT_CONCENTRATED_RAW})
+
+        hf = HardFilter(rugcheck=fake_rc, cfg=self._make_conc_cfg())
+        survivors = await hf.apply([candidate])
+
+        assert len(survivors) == 0
+        assert len(hf.dropped) == 1
+        _, reason = hf.dropped[0]
+        # top10_pct ≈ 131.2 >> 35 → holders check fails
+        assert "top10" in reason.lower() or "holders" in reason.lower()
+
+    async def test_momentum_first_no_rugcheck_when_momentum_fails(self):
+        """Even with real report available, RugCheck is NOT called when momentum fails."""
+        from memedog.hardfilter.hardfilter import HardFilter
+
+        bonk_mint = _REPORT_BONK_RAW["mint"]
+        # Candidate that fails momentum (low volume)
+        low_vol_candidate = make_candidate(
+            mint=bonk_mint,
+            liquidity_usd=25_000.0,
+            volume_5m=50.0,   # < min_volume_5m=1000
+        )
+        fake_rc = FakeRugCheck(reports={bonk_mint: _REPORT_BONK_RAW})
+
+        hf = HardFilter(rugcheck=fake_rc, cfg=self._make_bonk_cfg())
+        survivors = await hf.apply([low_vol_candidate])
+
+        assert len(survivors) == 0
+        assert fake_rc.call_count == 0, "RugCheck must NOT be called when momentum fails"
+
+    async def test_bonk_then_concentrated_only_bonk_survives(self):
+        """Funnel with both fixtures: only BONK passes, concentrated is dropped."""
+        from memedog.hardfilter.hardfilter import HardFilter
+
+        bonk_mint = _REPORT_BONK_RAW["mint"]
+        conc_mint = _REPORT_CONCENTRATED_RAW["mint"]
+
+        bonk_candidate = make_candidate(
+            mint=bonk_mint,
+            liquidity_usd=25_000.0,
+            volume_5m=2_000.0,
+            txns_5m_buys=20,
+            txns_5m_sells=10,
+        )
+        conc_candidate = make_candidate(
+            mint=conc_mint,
+            liquidity_usd=25_000.0,
+            volume_5m=2_000.0,
+            txns_5m_buys=20,
+            txns_5m_sells=10,
+        )
+
+        fake_rc = FakeRugCheck(reports={
+            bonk_mint: _REPORT_BONK_RAW,
+            conc_mint: _REPORT_CONCENTRATED_RAW,
+        })
+
+        # Use config that allows BONK (LP off, top10<50) but drops concentrated (top10>35)
+        cfg = HardFilterConfig(
+            authority=AuthorityFilterConfig(
+                require_mint_revoked=True,
+                require_freeze_revoked=True,
+                require_lp_burned_or_locked=False,
+            ),
+            holders=HoldersFilterConfig(
+                max_top10_pct=50.0,         # BONK 45.8% passes; concentrated 131% fails
+                max_single_wallet_pct=80.0,  # high enough to not block on single wallet
+                max_dev_pct=10.0,
+                max_sniper_pct=30.0,
+            ),
+            momentum=MomentumFilterConfig(
+                min_liquidity_usd=20_000.0,
+                min_volume_5m=1_000.0,
+                min_buy_sell_ratio_5m=1.0,
+                max_fdv_to_liquidity=50.0,
+            ),
+            on_rugcheck_failure="drop",
+        )
+
+        hf = HardFilter(rugcheck=fake_rc, cfg=cfg)
+        survivors = await hf.apply([bonk_candidate, conc_candidate])
+
+        assert len(survivors) == 1
+        assert survivors[0].mint == bonk_mint
+        assert len(hf.dropped) == 1
+        dropped_mint, reason = hf.dropped[0]
+        assert dropped_mint == conc_mint

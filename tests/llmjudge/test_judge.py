@@ -103,19 +103,24 @@ def _make_fake_cfg():
 
 
 # ---------------------------------------------------------------------------
-# Task 6 — happy path
+# Task 6 — happy path using REAL captured codex fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_judge_happy_path_returns_signal():
-    """Bull/bear/judge all return canned text → Signal with correct fields."""
-    bull_text = "Bull perspective: strong buy"
-    bear_text = "Bear perspective: some risks"
-    judge_json = _judge_json(signal="BULLISH", confidence=0.8)
+async def test_judge_happy_path_bullish_real_fixtures(fixture):
+    """Bull/bear/judge use real captured codex outputs → BULLISH Signal with real fields.
 
-    # FakeProvider returns responses in order: bull call, bear call, judge call
-    fp = FakeProvider([bull_text, bear_text, judge_json])
+    Call ordering: asyncio.gather runs bull (idx=0) then bear (idx=1) concurrently,
+    followed by judge (idx=2). FakeProvider consumes by index.
+    """
+    bull_text = fixture("codex/bull_argument.txt")    # real ~2KB bull argument
+    bear_text = fixture("codex/bear_argument.txt")    # real ~2.5KB bear argument
+    judge_data = fixture("codex/judge_bullish.json")  # real JudgeOut dict
+    judge_json_str = json.dumps(judge_data)
+
+    # index 0 → bull, index 1 → bear, index 2 → judge
+    fp = FakeProvider([bull_text, bear_text, judge_json_str])
 
     judge = LLMJudge(cfg=_make_fake_cfg(), provider=fp)
     snapshot = _make_snapshot(mint="MINT001", symbol="DOGX", trace_id="trace-1")
@@ -126,27 +131,42 @@ async def test_judge_happy_path_returns_signal():
     assert isinstance(result, Signal)
     assert result.mint == "MINT001"
     assert result.symbol == "DOGX"
+    # Verify against REAL fixture values
     assert result.signal == SignalType.BULLISH
-    assert 0.0 <= result.confidence <= 1.0
-    assert result.confidence == pytest.approx(0.8)
+    assert result.confidence == pytest.approx(0.78)  # from judge_bullish.json
     assert result.score_total == pytest.approx(72.0)
     assert result.trace_id == "trace-1"
+    # Verify real fixture bull_points / bear_points / red_flags / rationale
+    assert result.bull_points == judge_data["bull_points"]
+    assert result.bear_points == judge_data["bear_points"]
+    assert result.red_flags == judge_data["red_flags"]
+    assert result.rationale == judge_data["rationale"]
 
 
 @pytest.mark.asyncio
-async def test_judge_bearish_signal():
-    bear_json = _judge_json(signal="BEARISH", confidence=0.65)
-    fp = FakeProvider(["bull output", "bear output", bear_json])
+async def test_judge_happy_path_bearish_real_fixtures(fixture):
+    """Real judge_bearish.json fixture → BEARISH Signal with confidence=0.82."""
+    bull_text = fixture("codex/bull_argument.txt")
+    bear_text = fixture("codex/bear_argument.txt")
+    judge_data = fixture("codex/judge_bearish.json")  # real BEARISH JudgeOut
+    judge_json_str = json.dumps(judge_data)
+
+    fp = FakeProvider([bull_text, bear_text, judge_json_str])
 
     judge = LLMJudge(cfg=_make_fake_cfg(), provider=fp)
     result = await judge.judge(_make_snapshot(), _make_score())
 
     assert result.signal == SignalType.BEARISH
-    assert result.confidence == pytest.approx(0.65)
+    assert result.confidence == pytest.approx(0.82)  # from judge_bearish.json
+    assert result.bull_points == judge_data["bull_points"]
+    assert result.bear_points == judge_data["bear_points"]
+    assert result.red_flags == judge_data["red_flags"]
+    assert result.rationale == judge_data["rationale"]
 
 
 @pytest.mark.asyncio
 async def test_judge_neutral_signal():
+    """Constructed NEUTRAL JSON → NEUTRAL (logic edge case, no real fixture covers it)."""
     neutral_json = _judge_json(signal="NEUTRAL", confidence=0.5)
     fp = FakeProvider(["bull", "bear", neutral_json])
 
@@ -158,7 +178,7 @@ async def test_judge_neutral_signal():
 
 @pytest.mark.asyncio
 async def test_judge_confidence_clamped_to_zero_one():
-    """Confidence values outside [0,1] should be clamped."""
+    """Confidence values outside [0,1] should be clamped (constructed edge cases)."""
     too_high = _judge_json(signal="BULLISH", confidence=1.5)
     fp = FakeProvider(["bull", "bear", too_high])
 
@@ -175,7 +195,7 @@ async def test_judge_confidence_clamped_to_zero_one():
 
 @pytest.mark.asyncio
 async def test_judge_unknown_signal_string_defaults_neutral():
-    """Unrecognized signal string → NEUTRAL."""
+    """Unrecognized signal string → NEUTRAL (constructed edge case)."""
     weird_json = _judge_json(signal="MAYBE", confidence=0.5)
     fp = FakeProvider(["bull", "bear", weird_json])
 
@@ -186,7 +206,11 @@ async def test_judge_unknown_signal_string_defaults_neutral():
 
 @pytest.mark.asyncio
 async def test_judge_result_has_bull_bear_red_flag_rationale():
-    """Signal carries bull_points, bear_points, red_flags, rationale from JudgeOut."""
+    """Signal carries bull_points, bear_points, red_flags, rationale from JudgeOut.
+
+    Kept as constructed test — this verifies the mapping logic specifically,
+    separate from the fixture-based tests above.
+    """
     out_json = _judge_json(
         signal="BULLISH",
         confidence=0.7,

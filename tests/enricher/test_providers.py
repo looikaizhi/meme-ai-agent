@@ -17,6 +17,12 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
+# Real fixtures for use in the fetch_safety and fetch_holders real-data tests
+from tests.conftest import load_fixture as _load_fixture
+
+_REPORT_BONK_RAW = _load_fixture("rugcheck/report_bonk.json")
+_HELIUS_LARGEST_OK = _load_fixture("helius/largest_accounts_ok.json")
+
 
 # ---------------------------------------------------------------------------
 # Helpers / shared fixtures
@@ -140,6 +146,33 @@ class TestFetchSafety:
 
         assert result.available is False
 
+    async def test_real_bonk_report_via_client_maps_to_safety_info(self):
+        """Real report_bonk.json returned by rugcheck client maps correctly to SafetyInfo.
+
+        BONK parsed values: trust_score=93, risk_level='LOW',
+        mint_authority_revoked=True, freeze_authority_revoked=True,
+        lp_burned_or_locked=False (lpLockedPct=0 in real data).
+        """
+        from memedog.enricher.providers import fetch_safety
+
+        mock_client = AsyncMock()
+        mock_client.get_token_report = AsyncMock(return_value=_REPORT_BONK_RAW)
+
+        result = await fetch_safety(
+            mint=_REPORT_BONK_RAW["mint"],
+            rugcheck_report=None,
+            rugcheck_client=mock_client,
+        )
+
+        mock_client.get_token_report.assert_called_once_with(_REPORT_BONK_RAW["mint"])
+        assert result.available is True
+        # BONK: score_normalised=7 → trust_score=93, risk_level='LOW'
+        assert result.rug_trust_score == 93
+        assert result.rug_risk_level == "LOW"
+        assert result.mint_authority_revoked is True
+        assert result.freeze_authority_revoked is True
+        assert result.lp_burned_or_locked is False  # real BONK: lpLockedPct=0
+
 
 # ---------------------------------------------------------------------------
 # fetch_holders
@@ -196,6 +229,51 @@ class TestFetchHolders:
         result = await fetch_holders(mint="MINT123", helius_client=mock_helius)
 
         assert result.available is False
+
+    async def test_real_helius_fixture_holders_mapped_correctly(self):
+        """largest_accounts_ok.json → HolderInfo with real computed percentages.
+
+        The HeliusClient.get_largest_holders method computes:
+          top10_pct and max_wallet_pct relative to sum of returned uiAmounts.
+        We simulate the client returning the pre-computed result (as the real
+        client would after parsing the RPC response), and verify the mapping.
+
+        Real fixture values (20 accounts):
+          top10_pct ≈ 96.22%  (first account alone holds ~74.3%)
+          max_wallet_pct ≈ 74.32%
+          holder_count = 20
+        """
+        from memedog.enricher.providers import fetch_holders
+
+        # Simulate what HeliusClient.get_largest_holders returns after
+        # parsing the raw RPC response from largest_accounts_ok.json
+        accounts = _HELIUS_LARGEST_OK["result"]["value"]
+        amounts = [a.get("uiAmount") or 0.0 for a in accounts]
+        total = sum(amounts)
+        expected_top10_pct = sum(amounts[:10]) / total * 100.0
+        expected_max_pct = max(amounts) / total * 100.0
+        expected_count = len(accounts)
+
+        mock_helius = AsyncMock()
+        mock_helius.get_largest_holders = AsyncMock(
+            return_value={
+                "top10_pct": expected_top10_pct,
+                "max_wallet_pct": expected_max_pct,
+                "holder_count": expected_count,
+            }
+        )
+
+        result = await fetch_holders(
+            mint=_REPORT_BONK_RAW["mint"],  # reuse BONK mint for consistency
+            helius_client=mock_helius,
+        )
+
+        assert result.available is True
+        assert result.top10_pct == pytest.approx(expected_top10_pct, rel=1e-4)
+        assert result.max_wallet_pct == pytest.approx(expected_max_pct, rel=1e-4)
+        assert result.holder_count == expected_count  # 20 accounts in fixture
+        assert result.dev_wallet_pct is None   # not available from this RPC call
+        assert result.sniper_pct is None
 
 
 # ---------------------------------------------------------------------------
