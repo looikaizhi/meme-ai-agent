@@ -1,0 +1,126 @@
+{
+  "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+  "mintAuthority": null,
+  "freezeAuthority": null,
+  "score": 101,
+  "score_normalised": 7,
+  "rugged": false,
+  "totalHolders": 1018945,
+  "creator": "9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw",
+  "creatorBalance": 14608186413,
+  "token": {
+    "mintAuthority": null,
+    "supply": 8799471848022988767,
+    "decimals": 5,
+    "isInitialized": true,
+    "freezeAuthority": null
+  },
+  "risks": [
+    {
+      "name": "Mutable metadata",
+      "value": "",
+      "description": "Token metadata can be changed by the owner",
+      "score": 100,
+      "level": "warn"
+    }
+  ],
+  "markets": [
+    {
+      "pubkey": "7eexH14UjhNxJe6zTT3f1Vb1E8iACsBMVaWheDEmxdT2",
+      "marketType": "meteoraDlmm",
+      "lp": {
+        "lpLocked": 0,
+        "lpLockedPct": 0,
+        "lpLockedUSD": 0,
+        "lpTotalSupply": 0,
+        "lpCurrentSupply": 0
+      }
+    }
+  ],
+  "topHolders": [
+    {
+      "address": "5hpfC9VBxVcoW9opCnM2PqR6YWRLBzrBpabJTZnwwNiw",
+      "pct": 7.951234087754192,
+      "uiAmount": 6996666051223.375,
+      "owner": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+      "insider": false
+    },
+    {
+      "address": "2vPvEovB1gw8bAUqasThEv6YMAdJ77AU3RxiUNqknEiw",
+      "pct": 5.354921012069284,
+      "uiAmount": 4712047669409.045,
+      "owner": "51yZyDSnec4xnUv7XLRVYcDyV4x3wUtzrDcRaYbmQU5j",
+      "insider": false
+    },
+    {
+      "address": "8F5kDNNBic4AFUHw2G83yenGrcSeJRoQPGSyt8HAxV5W",
+      "pct": 5.35491991214638,
+      "uiAmount": 0,
+      "owner": "9FtGm6hJULCpA8An4sFg5ysHUExDZBtMeDCxsYnTnWh5",
+      "insider": false
+    },
+    {
+      "address": "8voVJqj2zFa9cew2TGAh5kGiSUMiU68RYJAUSXupRRz1",
+      "pct": 5.354918679935959,
+      "uiAmount": 0,
+      "owner": "8Tp9fFkZ2KcRBLYDTUNXo98Ez6ojGb6MZEPXfGDdeBzG",
+      "insider": false
+    },
+    {
+      "address": "F8FqZuUKfoy58aHLW6bfeEhfW9sTtJyqFTqnxVmGZ6dU",
+      "pct": 5.029966032905028,
+      "uiAmount": 4426104450305.966,
+      "owner": "AGkGWK1R669KDT4FCqgDgK7PgahGJPjD4J9xmVjuL9kn",
+      "insider": false
+    },
+    {
+      "address": "2UfAKNkmBWjad3qKnFCRfzbHwwhgU5eBs2DDXSJBMVSb",
+      "pct": 3.89186379505386,
+      "uiAmount": 3424634590091.635,
+      "owner": "7Lp4JBapgNhXoxpJtR2twufh7oaQyqngqJpy7HFJcn7h",
+      "insider": false
+    },
+    {
+      "address": "4XHP9YQeeXPXHAjNXuKio1na1ypcxFSqFYBHtptQticd",
+      "pct": 3.591448367543088,
+      "uiAmount": 3160284880382.352,
+      "owner": "9AdEE8AAm1XgJrPEs4zkTPozr3o4U5iGbgvPwkNdLDJ3",
+      "insider": false
+    },
+    {
+      "address": "6LozHQrLbEPeJGWKpN6wnnk76GhD4bGAVSoTBE5xXpsf",
+      "pct": 3.1672025241897717,
+      "uiAmount": 2786970944859.524,
+      "owner": "4xLpwxgYuPwPvtQjE94RLS4WZ4aD8NJYYKr2AJk99Qdg",
+      "insider": false
+    },
+    {
+      "address": "9LHQb1Nh9U65WHgD63FgpkjgPHUfU8s54PXqwwdM8g6K",
+      "pct": 3.055022855308394,
+      "uiAmount": 2688258761035.3022,
+      "owner": "9RpzaFh4J8F6Qg1gjnhrhSp9eXdVDjsesZXe53qp7ubB",
+      "insider": false
+    },
+    {
+      "address": "5M3FN5Aza1q7cdxzanH31efwMbE3N78s5aSMPzthyjrP",
+      "pct": 3.049906717712953,
+      "uiAmount": 93153158042.95245,
+      "owner": "GJ8HjXMqQ79WRvxeAMRMng4ZTaohPcF1MZmBf9tVPpXA",
+      "insider": false
+    },
+    {
+      "address": "FNGhHbP4D9FtsiRpYXrr9mXjsegKJZ8exEvKAeUtgXPz",
+      "pct": 3.042371451121124,
+      "uiAmount": 2677126193536.918,
+      "owner": "EbLm4ZtRqDftrQnZaMMvnwcKjK5ef5vm1Hg3sAPv3tKi",
+      "insider": false
+    },
+    {
+      "address": "upQMKh1YQSBPc7npnYTBHUCh9GPRTAjqyJDozZvSCAg",
+      "pct": 2.8055418796245695,
+      "uiAmount": 0,
+      "owner": "11111111111111111111111111111111",
+      "insider": false
+    }
+  ]
+}
