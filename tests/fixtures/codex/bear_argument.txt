@@ -1,0 +1,17 @@
+Bearish case on `MOON` / mint `StrongMint`:
+
+- **Composite is not “safe”; it is only `86/100`.** That leaves a meaningful `14-point` risk gap. For a crypto token, anything short of near-perfect can still hide tail risks like liquidity exits, holder concentration, contract/admin issues, or narrative collapse.
+
+- **Social is the weakest category: `70/100`.** This is the clearest red flag. A `70` social score suggests the token may lack strong community depth, durable attention, credible mindshare, or organic support. Since social only contributes `10.5` out of `15`, this is the biggest relative weakness in the profile.
+
+- **Momentum is good but not decisive: `82/100`.** A token with momentum below the high-90s is not showing overwhelming trend strength. The missing `18` raw points could mean price/volume action is inconsistent, already cooling, or vulnerable to reversal. Momentum-driven crypto trades can unwind quickly when attention fades.
+
+- **Holder quality is not pristine: `88/100`.** This still implies a `12-point` raw shortfall. For a token, holder risks matter heavily: concentration, insider wallets, airdrop farmers, inactive holders, or weak distribution can all create sell pressure. The score is strong, but not strong enough to dismiss supply-side risk.
+
+- **Safety is high but not perfect: `95/100`.** Because safety carries the largest weight at `35%`, even a small safety gap matters. A `95` means the model still found some residual risk or missing assurance. For risk management, “not 100” in safety is important because one contract, mint, freeze, liquidity, or ownership issue can dominate all other positives.
+
+- **The score is weighted, so weak social is partially masked.** Safety and holders contribute `55.3` of the total `86`, while social contributes only `10.5`. That means the headline score may look stronger than the token’s actual market resilience if social demand is shallow.
+
+- **No supporting details are provided for liquidity, age, top-holder percentage, volume quality, contract permissions, or unlocks.** The data gives category scores, not the underlying evidence. As a risk officer, that is a reason to avoid rather than trust the composite blindly.
+
+**Bearish conclusion:** despite the strong `86/100` composite, `MOON` is not a clean low-risk token. The main avoid signal is the weak `70/100` social score, backed by non-perfect holder, momentum, and safety scores. The bullish-looking headline could be masking fragility in demand, distribution, or residual contract/liquidity risk.

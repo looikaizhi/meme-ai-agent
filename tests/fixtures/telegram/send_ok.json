@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "result": {
+    "message_id": 239,
+    "from": {
+      "id": 1000000000,
+      "is_bot": true,
+      "first_name": "memedog bot",
+      "username": "memedog_test_bot"
+    },
+    "chat": {
+      "id": 2000000000,
+      "first_name": "Test",
+      "last_name": "User",
+      "username": "test_user",
+      "type": "private"
+    },
+    "date": 1782064449,
+    "text": "fixture capture (ignore)"
+  }
+}

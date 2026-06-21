@@ -1,0 +1,29 @@
+Based on the supplied data only, MOON has a strong bullish profile: **86.0/100 composite score**, with every dimension at or above **70/100** and the highest-weighted categories doing most of the work.
+
+**Bullish Buy Case**
+
+1. **Top-tier safety score: 95/100**
+   Safety is the largest weighted category at **35%**, and MOON contributes **33.30 points** from this bucket alone. That is the strongest bull signal here: the model sees very low relative risk from the available safety inputs.
+
+2. **Strong holder quality: 88/100**
+   Holders are weighted **25%**, adding **22.00 points** to the composite. A high holder score suggests the token has favorable ownership/holder structure characteristics, which supports a stronger buy thesis than pure momentum alone.
+
+3. **Momentum is already bullish: 82/100**
+   Momentum adds another **20.50 weighted points**. This indicates MOON is not just “safe” on paper; it is also showing positive market action according to the scoring model.
+
+4. **Social score is positive with upside: 70/100**
+   Social contributes **10.50 points** out of the possible 15. It is the lowest category, but still clearly positive. Bullishly, this means the token already has social support while leaving room for sentiment/community growth to become an additional catalyst.
+
+5. **Balanced strength across categories**
+   The buy case is stronger because the score is not dependent on one metric. MOON has:
+   - Safety: **95**
+   - Holders: **88**
+   - Momentum: **82**
+   - Social: **70**
+
+   No dimension is weak. That makes the **86/100 composite** look broad-based rather than inflated by one outlier.
+
+6. **High-weight categories confirm the thesis**
+   Safety, holders, and momentum make up **85% of the model weight**. MOON scores **95, 88, and 82** in those exact categories. That is the core bullish argument.
+
+**Bottom line:** MOON screens as a strong bullish buy candidate from the provided model. The standout signal is the combination of **very high safety**, **strong holder metrics**, and **active momentum**, producing a high composite score of **86/100**.

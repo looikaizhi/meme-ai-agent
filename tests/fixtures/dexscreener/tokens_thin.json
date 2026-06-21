@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0.0",
+  "pairs": [
+    {
+      "chainId": "solana",
+      "dexId": "pumpfun",
+      "url": "https://dexscreener.com/solana/5vkrlub8aqiyqj2s4qzdmvenzagyvjjpm3d4lgsze2iy",
+      "pairAddress": "5VkRLUB8aQiyqj2S4qzDmVENzaGyVJjPM3D4LGszE2iy",
+      "baseToken": {
+        "address": "W55PNADYXTUNEfEFnbr5FEyq1w869coX9oARtXDpump",
+        "name": "Staring Animals",
+        "symbol": "THE COUNCIL"
+      },
+      "quoteToken": {
+        "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "name": "USD Coin",
+        "symbol": "USDC"
+      },
+      "priceNative": "0.000008557",
+      "priceUsd": "0.000008557",
+      "txns": {
+        "m5": {
+          "buys": 6,
+          "sells": 12
+        },
+        "h1": {
+          "buys": 247,
+          "sells": 191
+        },
+        "h6": {
+          "buys": 247,
+          "sells": 191
+        },
+        "h24": {
+          "buys": 247,
+          "sells": 191
+        }
+      },
+      "volume": {
+        "h24": 18227.04,
+        "h6": 18227.04,
+        "h1": 18227.04,
+        "m5": 947.42
+      },
+      "priceChange": {
+        "m5": -22.16,
+        "h1": 86.33,
+        "h6": 86.33,
+        "h24": 86.33
+      },
+      "fdv": 8557.07,
+      "marketCap": 8557.07,
+      "pairCreatedAt": 1782061622000,
+      "info": {
+        "imageUrl": "https://cdn.dexscreener.com/cms/images/JuUkwvflGaJmwBj_?width=800&height=800&quality=95&format=auto",
+        "header": "https://cdn.dexscreener.com/cms/images/HfNgW8r9gtq6GPve?width=1500&height=500&quality=95&format=auto",
+        "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/W55PNADYXTUNEfEFnbr5FEyq1w869coX9oARtXDpump?timestamp=1782064500000",
+        "websites": [
+          {
+            "url": "https://knowyourmeme.com/memes/staring-animals",
+            "label": "Website"
+          }
+        ],
+        "socials": [
+          {
+            "url": "https://x.com/i/communities/2016265073107599686",
+            "type": "twitter"
+          }
+        ]
+      }
+    }
+  ]
+}

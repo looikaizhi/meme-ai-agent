@@ -1,0 +1,152 @@
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "context": {
+      "slot": 427990158,
+      "apiVersion": "3.1.9"
+    },
+    "value": [
+      {
+        "address": "ASjLFEgetyQzaXYQRLGrrdSMkJLcWhp6g6RjEyxLEjrV",
+        "uiAmount": 718797703.749632,
+        "decimals": 6,
+        "amount": "718797703749632",
+        "uiAmountString": "718797703.749632"
+      },
+      {
+        "address": "C3HgGBAGxNcrYKmdKzzc5eG4sNKvk3wsig9FV7aqi6mN",
+        "uiAmount": 108483137.659759,
+        "decimals": 6,
+        "amount": "108483137659759",
+        "uiAmountString": "108483137.659759"
+      },
+      {
+        "address": "4JzXAYMVVsq62QB2bVTKqcv4yPmgLT6vypFuoT6281JW",
+        "uiAmount": 21399517.168513,
+        "decimals": 6,
+        "amount": "21399517168513",
+        "uiAmountString": "21399517.168513"
+      },
+      {
+        "address": "Bc7UPr5ysxCwe5kEQAs4fD3d2Pen55B8eJM5K6QLcXNE",
+        "uiAmount": 18854988.658128,
+        "decimals": 6,
+        "amount": "18854988658128",
+        "uiAmountString": "18854988.658128"
+      },
+      {
+        "address": "HcQcDcPwUeXHhGjbaTRBz9jGiv1s34vCfYCedXyM3pS3",
+        "uiAmount": 14785956.989171,
+        "decimals": 6,
+        "amount": "14785956989171",
+        "uiAmountString": "14785956.989171"
+      },
+      {
+        "address": "33bih3h4RQb7rTwutPSLWe59pj1VtZxzS2E1bz9Kquao",
+        "uiAmount": 14243985.616346,
+        "decimals": 6,
+        "amount": "14243985616346",
+        "uiAmountString": "14243985.616346"
+      },
+      {
+        "address": "ENggpvE2uCH9DsZYrMRwcxaBxxXyZ9wbtoNPBiSzC31E",
+        "uiAmount": 12463421.248858,
+        "decimals": 6,
+        "amount": "12463421248858",
+        "uiAmountString": "12463421.248858"
+      },
+      {
+        "address": "AfrqAbfUjXttwHbALkHHCqmMCperZGDu3tWePWtTUu9J",
+        "uiAmount": 10857850.194812,
+        "decimals": 6,
+        "amount": "10857850194812",
+        "uiAmountString": "10857850.194812"
+      },
+      {
+        "address": "FEjwgXuNP7vMrwH9Sa8UWLTFFMzkhs6LShVXbtK1mYXp",
+        "uiAmount": 5901918.735305,
+        "decimals": 6,
+        "amount": "5901918735305",
+        "uiAmountString": "5901918.735305"
+      },
+      {
+        "address": "Qz64GYETtu396BBCwLqY8et3pyMkz2jJLR4Yf7cCEQi",
+        "uiAmount": 4870971.245317,
+        "decimals": 6,
+        "amount": "4870971245317",
+        "uiAmountString": "4870971.245317"
+      },
+      {
+        "address": "GegyZsqYCSFFMTDkhwGRoR25eRLwVvaZYBqBrCKngtRL",
+        "uiAmount": 4743336.307588,
+        "decimals": 6,
+        "amount": "4743336307588",
+        "uiAmountString": "4743336.307588"
+      },
+      {
+        "address": "DFceUX8W736nfu1kRJgep78AKyFddVLTz68o6XszKrmw",
+        "uiAmount": 4416196.826857,
+        "decimals": 6,
+        "amount": "4416196826857",
+        "uiAmountString": "4416196.826857"
+      },
+      {
+        "address": "586VLndVBxPNJp9xaEpgDpKkBQXR96EjSA7PAc2GmpJy",
+        "uiAmount": 4351861.268665,
+        "decimals": 6,
+        "amount": "4351861268665",
+        "uiAmountString": "4351861.268665"
+      },
+      {
+        "address": "HvVaunoCYdbfSg9mzr8K372cJYeBBkcB5LGWppKt4HgC",
+        "uiAmount": 4074716.908461,
+        "decimals": 6,
+        "amount": "4074716908461",
+        "uiAmountString": "4074716.908461"
+      },
+      {
+        "address": "3Wa9spW989R7WNTLq2adLthsqhh8xJJvSFDiTnSxAcFE",
+        "uiAmount": 3771490.798433,
+        "decimals": 6,
+        "amount": "3771490798433",
+        "uiAmountString": "3771490.798433"
+      },
+      {
+        "address": "EoCnhAEHVSWx15rqtvcu2cSs9nL3jqJRgXAj9UdJWRyx",
+        "uiAmount": 3648426.730578,
+        "decimals": 6,
+        "amount": "3648426730578",
+        "uiAmountString": "3648426.730578"
+      },
+      {
+        "address": "Cy6juUwPUyqFKRNzKYYetZxJySMGBg88ax842JySBEQW",
+        "uiAmount": 3339344.703254,
+        "decimals": 6,
+        "amount": "3339344703254",
+        "uiAmountString": "3339344.703254"
+      },
+      {
+        "address": "EZEShVoCwPoqjo1jxf1LFz33gtroxH3714nk3DEjeC57",
+        "uiAmount": 2993318.325644,
+        "decimals": 6,
+        "amount": "2993318325644",
+        "uiAmountString": "2993318.325644"
+      },
+      {
+        "address": "Bo7MJA7Uk3jHKAMADQkKDWCFcYUwoesTjNPGv9NDJZBi",
+        "uiAmount": 2645520.62566,
+        "decimals": 6,
+        "amount": "2645520625660",
+        "uiAmountString": "2645520.62566"
+      },
+      {
+        "address": "AJdYGhiUH25tugX7MobVUT5w9ahXLirVLtdXPSN2wXTQ",
+        "uiAmount": 2583347.245382,
+        "decimals": 6,
+        "amount": "2583347245382",
+        "uiAmountString": "2583347.245382"
+      }
+    ]
+  },
+  "id": 1
+}
