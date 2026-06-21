@@ -65,6 +65,7 @@ _NOW_TS_MS = int(datetime.now(timezone.utc).timestamp() * 1000) - 60 * 60 * 1000
 
 
 _GOOD_PAIR = {
+    "chainId": "solana",
     "pairAddress": "PAIR_GOOD",
     "baseToken": {"address": "MINT_GOOD", "symbol": "GOODDOG"},
     "priceUsd": "0.00123",
@@ -77,6 +78,7 @@ _GOOD_PAIR = {
 }
 
 _BAD_PAIR = {
+    "chainId": "solana",
     "pairAddress": "PAIR_BAD",
     "baseToken": {"address": "MINT_BAD", "symbol": "BADDOG"},
     "priceUsd": "0.00001",
@@ -88,10 +90,19 @@ _BAD_PAIR = {
     "pairCreatedAt": _NOW_TS_MS,
 }
 
+# Map of mint address → pairs (used by FakeDexScreenerClient)
+_PAIRS_BY_MINT: dict[str, list[dict]] = {
+    "MINT_GOOD": [_GOOD_PAIR],
+    "MINT_BAD": [_BAD_PAIR],
+}
+
 
 class FakeDexScreenerClient:
-    async def fetch_solana_pairs(self) -> list[dict]:
-        return [_GOOD_PAIR, _BAD_PAIR]
+    async def fetch_latest_token_addresses(self, chain: str) -> list[str]:
+        return list(_PAIRS_BY_MINT.keys())
+
+    async def get_token_pairs(self, mint: str) -> list[dict]:
+        return _PAIRS_BY_MINT.get(mint, [])
 
 
 # ---------------------------------------------------------------------------

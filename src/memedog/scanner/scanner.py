@@ -1,4 +1,4 @@
-"""Scanner: fetches, filters, converts, and deduplicates Solana meme-coin pairs."""
+"""Scanner: discovers latest tokens, selects representative pairs, filters, and deduplicates."""
 from __future__ import annotations
 
 import logging
@@ -14,28 +14,37 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Fix 5 — type-annotate client via Protocol
+# Protocol — structural type for the injected discovery client
 # ---------------------------------------------------------------------------
 
 
-class PairFetcher(Protocol):
-    """Structural type for any object that can fetch trading pairs."""
+class TokenDiscoverer(Protocol):
+    """Structural type for any object that can discover tokens and their pairs."""
 
-    async def fetch_solana_pairs(self) -> list[dict]: ...
+    async def fetch_latest_token_addresses(self, chain: str) -> list[str]: ...
+
+    async def get_token_pairs(self, mint: str) -> list[dict]: ...
 
 
 class Scanner:
     """Orchestrates periodic scanning for new Solana meme-coin candidates.
 
+    Discovery flow:
+    1. ``fetch_latest_token_addresses(chain)`` → list of recently-listed mints.
+    2. For each mint (skipping already-seen ones): ``get_token_pairs(mint)`` → raw pairs.
+    3. Filter pairs to the configured chain; pick the one with highest liquidity.
+    4. Apply the age / liquidity / volume prefilter.
+    5. Convert to :class:`TokenCandidate` and record in the dedup cache.
+
     Parameters
     ----------
     client:
-        Any object with ``async fetch_solana_pairs() -> list[dict]``.
+        Any object satisfying the :class:`TokenDiscoverer` protocol.
     cfg:
         A :class:`~memedog.config.settings.ScannerConfig` instance.
     """
 
-    def __init__(self, client: PairFetcher, cfg: ScannerConfig) -> None:
+    def __init__(self, client: TokenDiscoverer, cfg: ScannerConfig) -> None:
         self._client = client
         self._cfg = cfg
         # mint -> unix timestamp (float) of first emission
@@ -46,27 +55,27 @@ class Scanner:
     # ------------------------------------------------------------------
 
     async def scan(self) -> list[TokenCandidate]:
-        """Fetch, prefilter, convert, and deduplicate Solana pairs.
+        """Discover, prefilter, convert, and deduplicate Solana pairs.
 
         Returns
         -------
         list[TokenCandidate]
-            New, non-deduplicated candidates that passed all filters.
-            Returns ``[]`` on :class:`~memedog.clients.base.DataSourceError`.
+            New candidates that passed all filters and were not in the
+            dedup cache.  Returns ``[]`` on
+            :class:`~memedog.clients.base.DataSourceError` from the
+            address-discovery step.
         """
+        # Step 1: discover latest token addresses
         try:
-            raw_pairs = await self._client.fetch_solana_pairs()
+            addresses = await self._client.fetch_latest_token_addresses(self._cfg.chain)
         except DataSourceError as exc:
-            logger.warning("DataSourceError in Scanner.scan: %s", exc)
+            logger.warning("DataSourceError fetching token addresses: %s", exc)
             return []
 
         now_utc = datetime.now(timezone.utc)
-        # Fix 6 — single clock source: derive now_ts from the same snapshot
         now_ts = now_utc.timestamp()
 
-        candidates: list[TokenCandidate] = []
-
-        # Expire old dedup entries before processing
+        # Expire old dedup entries
         ttl_sec = self._cfg.dedup_ttl_min * 60
         self._seen = {
             mint: ts
@@ -74,32 +83,43 @@ class Scanner:
             if now_ts - ts < ttl_sec
         }
 
-        for pair in raw_pairs:
-            # --- Prefilter ---
-            if not self._passes_prefilter(pair, now_utc):
+        candidates: list[TokenCandidate] = []
+
+        for mint in addresses:
+            # Skip already-seen mints without making an extra API call
+            if mint in self._seen:
                 continue
 
-            # Fix 1 — wrap per-pair dedup key extraction + convert so a
-            # malformed pair skips only itself, not the whole scan.
+            # Step 2: fetch pairs for this token
             try:
-                mint = pair["baseToken"]["address"]
-            except (KeyError, TypeError) as exc:
+                raw_pairs = await self._client.get_token_pairs(mint)
+            except DataSourceError as exc:
                 logger.warning(
-                    "Skipping pair %s — missing baseToken: %s",
-                    pair.get("pairAddress"),
+                    "DataSourceError fetching pairs for mint=%s, skipping: %s",
+                    mint,
                     exc,
                 )
                 continue
 
-            # --- Dedup ---
-            if mint in self._seen:
+            # Step 3: select the representative pair (best-liquidity on-chain pair)
+            representative = self._select_representative_pair(mint, raw_pairs)
+            if representative is None:
                 continue
 
-            # --- Convert ---
+            # Step 4: prefilter
+            if not self._passes_prefilter(representative, now_utc):
+                continue
+
+            # Step 5: convert
             try:
-                candidate = self._convert(pair)
+                candidate = self._convert(representative)
             except (KeyError, ValueError, TypeError) as exc:
-                logger.warning("Failed to convert pair %s: %s", pair.get("pairAddress"), exc)
+                logger.warning(
+                    "Failed to convert pair %s for mint=%s: %s",
+                    representative.get("pairAddress"),
+                    mint,
+                    exc,
+                )
                 continue
 
             # Record seen and collect
@@ -112,20 +132,62 @@ class Scanner:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _select_representative_pair(
+        self, mint: str, raw_pairs: list[dict]
+    ) -> dict | None:
+        """From *raw_pairs*, pick the one on the configured chain with the highest liquidity.
+
+        Parameters
+        ----------
+        mint:
+            Token mint address (used only for log messages).
+        raw_pairs:
+            All pairs returned by ``get_token_pairs``.
+
+        Returns
+        -------
+        dict or None
+            The representative pair dict, or ``None`` if no on-chain pair
+            was found or the data is malformed.
+        """
+        chain_pairs: list[dict] = []
+        for pair in raw_pairs:
+            if not isinstance(pair, dict):
+                continue
+            if pair.get("chainId") != self._cfg.chain:
+                continue
+            chain_pairs.append(pair)
+
+        if not chain_pairs:
+            logger.debug(
+                "No pairs on chain=%s for mint=%s (total pairs: %d)",
+                self._cfg.chain,
+                mint,
+                len(raw_pairs),
+            )
+            return None
+
+        # Pick the pair with the highest liquidity USD
+        def _liquidity(pair: dict) -> float:
+            try:
+                return float(pair["liquidity"]["usd"])
+            except (KeyError, TypeError, ValueError):
+                return 0.0
+
+        return max(chain_pairs, key=_liquidity)
+
     @staticmethod
     def _parse_created_at(pair: dict) -> datetime:
-        """Fix 7 — single helper to parse pairCreatedAt ms-epoch → aware datetime."""
+        """Parse pairCreatedAt ms-epoch → timezone-aware datetime."""
         return datetime.fromtimestamp(pair["pairCreatedAt"] / 1000, tz=timezone.utc)
 
     def _passes_prefilter(self, pair: dict, now_utc: datetime) -> bool:
         """Return True if *pair* satisfies all configured prefilter thresholds."""
         try:
-            # Fix 7 — reuse _parse_created_at instead of duplicating the parse
             created_at = self._parse_created_at(pair)
             liquidity_usd: float = float(pair["liquidity"]["usd"])
             volume_m5: float = float(pair["volume"]["m5"])
         except (KeyError, TypeError, ValueError) as exc:
-            # Fix 4 — log a warning so API schema breakage is observable
             logger.warning(
                 "Skipping pair %s in prefilter — schema mismatch: %s",
                 pair.get("pairAddress"),
@@ -133,19 +195,14 @@ class Scanner:
             )
             return False
 
-        # Age check
         age_min = (now_utc - created_at).total_seconds() / 60.0
 
         if age_min < self._cfg.min_pair_age_min:
             return False
         if age_min > self._cfg.max_pair_age_min:
             return False
-
-        # Liquidity check
         if liquidity_usd < self._cfg.prefilter_min_liquidity_usd:
             return False
-
-        # Volume check
         if volume_m5 < self._cfg.prefilter_min_volume_5m:
             return False
 
@@ -153,13 +210,11 @@ class Scanner:
 
     def _convert(self, pair: dict) -> TokenCandidate:
         """Convert a raw DexScreener pair dict to a :class:`TokenCandidate`."""
-        # Fix 7 — reuse _parse_created_at
         created_at = self._parse_created_at(pair)
         return TokenCandidate(
             mint=pair["baseToken"]["address"],
             pair_address=pair["pairAddress"],
             symbol=pair["baseToken"]["symbol"],
-            # Fix 3 — honour configurable chain instead of hardcoding "solana"
             chain=self._cfg.chain,
             pair_created_at=created_at,
             price_usd=float(pair["priceUsd"]),

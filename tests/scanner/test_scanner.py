@@ -1,4 +1,11 @@
-"""Tests for Task 2: Scanner (prefilter + convert + dedup)."""
+"""Tests for Scanner — discovery-based flow (Task 2).
+
+The Scanner now depends on a client that exposes:
+  - async fetch_latest_token_addresses(chain: str) -> list[str]
+  - async get_token_pairs(mint: str) -> list[dict]
+
+All tests use a fake async client injected via the constructor.
+"""
 from __future__ import annotations
 
 import time
@@ -35,9 +42,10 @@ def make_raw_pair(
     address: str = "MINT_AAA",
     symbol: str = "AAA",
     pair_address: str = "PAIR_AAA",
+    chain_id: str = "solana",
     liquidity_usd: float = 25_000.0,
     volume_m5: float = 500.0,
-    age_min: float = 15.0,          # age in minutes (relative to now)
+    age_min: float = 15.0,
     price_usd: str = "0.001",
     fdv: float = 1_000_000.0,
     volume_h1: float = 3_000.0,
@@ -49,6 +57,7 @@ def make_raw_pair(
     now_ms = int(time.time() * 1000)
     created_at_ms = now_ms - int(age_min * 60 * 1000)
     return {
+        "chainId": chain_id,
         "baseToken": {"address": address, "symbol": symbol},
         "pairAddress": pair_address,
         "priceUsd": price_usd,
@@ -61,10 +70,42 @@ def make_raw_pair(
     }
 
 
-def make_fake_client(pairs: list[dict]) -> AsyncMock:
-    """Return a mock client whose fetch_solana_pairs returns *pairs*."""
+def make_fake_client(
+    addresses: list[str],
+    pairs_by_mint: dict[str, list[dict]],
+    *,
+    address_error: Exception | None = None,
+    pair_errors: dict[str, Exception] | None = None,
+) -> AsyncMock:
+    """
+    Build a fake async client with fetch_latest_token_addresses + get_token_pairs.
+
+    Parameters
+    ----------
+    addresses:
+        Return value of fetch_latest_token_addresses (for all chains).
+    pairs_by_mint:
+        Map of mint -> list of pair dicts returned by get_token_pairs.
+    address_error:
+        If set, fetch_latest_token_addresses raises this exception.
+    pair_errors:
+        Map of mint -> exception to raise from get_token_pairs.
+    """
+    pair_errors = pair_errors or {}
+
+    async def fake_fetch_latest(chain: str) -> list[str]:
+        if address_error is not None:
+            raise address_error
+        return addresses
+
+    async def fake_get_pairs(mint: str) -> list[dict]:
+        if mint in pair_errors:
+            raise pair_errors[mint]
+        return pairs_by_mint.get(mint, [])
+
     client = AsyncMock()
-    client.fetch_solana_pairs = AsyncMock(return_value=pairs)
+    client.fetch_latest_token_addresses = AsyncMock(side_effect=fake_fetch_latest)
+    client.get_token_pairs = AsyncMock(side_effect=fake_get_pairs)
     return client
 
 
@@ -79,7 +120,10 @@ class TestPrefilter:
 
         cfg = make_scanner_config()
         pair = make_raw_pair(liquidity_usd=25_000, volume_m5=500, age_min=15)
-        client = make_fake_client([pair])
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
@@ -94,7 +138,10 @@ class TestPrefilter:
 
         cfg = make_scanner_config(prefilter_min_liquidity_usd=10_000.0)
         pair = make_raw_pair(liquidity_usd=2_000.0, age_min=15)
-        client = make_fake_client([pair])
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
@@ -107,7 +154,10 @@ class TestPrefilter:
 
         cfg = make_scanner_config(prefilter_min_volume_5m=100.0)
         pair = make_raw_pair(volume_m5=50.0, age_min=15)
-        client = make_fake_client([pair])
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
@@ -119,8 +169,11 @@ class TestPrefilter:
         from memedog.scanner.scanner import Scanner
 
         cfg = make_scanner_config(min_pair_age_min=5)
-        pair = make_raw_pair(age_min=2.0)   # 2 min old, threshold is 5
-        client = make_fake_client([pair])
+        pair = make_raw_pair(age_min=2.0)
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
@@ -132,8 +185,11 @@ class TestPrefilter:
         from memedog.scanner.scanner import Scanner
 
         cfg = make_scanner_config(max_pair_age_min=60)
-        pair = make_raw_pair(age_min=90.0)  # 90 min old, threshold is 60
-        client = make_fake_client([pair])
+        pair = make_raw_pair(age_min=90.0)
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
@@ -145,16 +201,119 @@ class TestPrefilter:
         from memedog.scanner.scanner import Scanner
 
         cfg = make_scanner_config()
-        good = make_raw_pair(address="GOOD", liquidity_usd=25_000, volume_m5=500, age_min=15)
-        bad_liq = make_raw_pair(address="BAD_LIQ", liquidity_usd=500, age_min=15)
-        bad_age = make_raw_pair(address="BAD_AGE", age_min=120)  # too old
-        client = make_fake_client([good, bad_liq, bad_age])
+        good = make_raw_pair(address="GOOD", pair_address="PAIR_GOOD",
+                             liquidity_usd=25_000, volume_m5=500, age_min=15)
+        bad_liq = make_raw_pair(address="BAD_LIQ", pair_address="PAIR_BAD_LIQ",
+                                liquidity_usd=500, age_min=15)
+        bad_age = make_raw_pair(address="BAD_AGE", pair_address="PAIR_BAD_AGE",
+                                age_min=120)
+        client = make_fake_client(
+            addresses=["GOOD", "BAD_LIQ", "BAD_AGE"],
+            pairs_by_mint={
+                "GOOD": [good],
+                "BAD_LIQ": [bad_liq],
+                "BAD_AGE": [bad_age],
+            },
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
 
         assert len(results) == 1
         assert results[0].mint == "GOOD"
+
+
+# ---------------------------------------------------------------------------
+# Representative pair selection (highest liquidity Solana pair)
+# ---------------------------------------------------------------------------
+
+class TestRepresentativePairSelection:
+    async def test_picks_highest_liquidity_solana_pair(self):
+        """When a token has multiple solana pairs, the one with highest liquidity wins."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        pair_low = make_raw_pair(
+            address="MINT_A", pair_address="PAIR_LOW",
+            liquidity_usd=15_000.0, volume_m5=200.0, age_min=20,
+        )
+        pair_high = make_raw_pair(
+            address="MINT_A", pair_address="PAIR_HIGH",
+            liquidity_usd=50_000.0, volume_m5=800.0, age_min=20,
+        )
+        client = make_fake_client(
+            addresses=["MINT_A"],
+            pairs_by_mint={"MINT_A": [pair_low, pair_high]},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert results[0].pair_address == "PAIR_HIGH"
+        assert results[0].liquidity_usd == pytest.approx(50_000.0)
+
+    async def test_skips_token_when_all_pairs_are_wrong_chain(self):
+        """A token whose pairs are all on base-chain (not solana) is skipped."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config(chain="solana")
+        pair_base = make_raw_pair(
+            address="MINT_BASE", pair_address="PAIR_BASE",
+            chain_id="base",  # wrong chain
+            liquidity_usd=50_000.0, volume_m5=800.0, age_min=20,
+        )
+        client = make_fake_client(
+            addresses=["MINT_BASE"],
+            pairs_by_mint={"MINT_BASE": [pair_base]},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert results == []
+
+    async def test_uses_only_solana_pairs_when_mixed_chains(self):
+        """Among solana + base pairs, only the best solana pair is used."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config(chain="solana")
+        solana_pair = make_raw_pair(
+            address="MINT_MIX", pair_address="PAIR_SOL",
+            chain_id="solana",
+            liquidity_usd=20_000.0, volume_m5=300.0, age_min=20,
+        )
+        base_pair = make_raw_pair(
+            address="MINT_MIX", pair_address="PAIR_BASE",
+            chain_id="base",
+            liquidity_usd=999_000.0,  # higher liquidity, but wrong chain
+            volume_m5=9999.0, age_min=20,
+        )
+        client = make_fake_client(
+            addresses=["MINT_MIX"],
+            pairs_by_mint={"MINT_MIX": [base_pair, solana_pair]},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert results[0].pair_address == "PAIR_SOL"
+
+    async def test_skips_token_when_no_pairs_returned(self):
+        """A token address that yields no pairs is silently skipped."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        client = make_fake_client(
+            addresses=["MINT_EMPTY"],
+            pairs_by_mint={"MINT_EMPTY": []},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert results == []
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +340,10 @@ class TestConversion:
             sells=10,
             price_change_m5=5.0,
         )
-        client = make_fake_client([pair])
+        client = make_fake_client(
+            addresses=["MINT_XYZ"],
+            pairs_by_mint={"MINT_XYZ": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
@@ -201,7 +363,7 @@ class TestConversion:
         assert tc.txns_5m_sells == 10
         assert tc.price_change_5m == pytest.approx(5.0)
         assert isinstance(tc.pair_created_at, datetime)
-        assert tc.pair_created_at.tzinfo is not None  # timezone-aware
+        assert tc.pair_created_at.tzinfo is not None
         assert isinstance(tc.trace_id, str)
         assert len(tc.trace_id) > 0
 
@@ -212,14 +374,17 @@ class TestConversion:
         cfg = make_scanner_config()
         pair1 = make_raw_pair(address="MINT_A", pair_address="PAIR_A")
         pair2 = make_raw_pair(address="MINT_B", pair_address="PAIR_B")
-        client = make_fake_client([pair1, pair2])
+        client = make_fake_client(
+            addresses=["MINT_A", "MINT_B"],
+            pairs_by_mint={"MINT_A": [pair1], "MINT_B": [pair2]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
 
         assert len(results) == 2
         trace_ids = {r.trace_id for r in results}
-        assert len(trace_ids) == 2  # all unique
+        assert len(trace_ids) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +398,10 @@ class TestDedup:
 
         cfg = make_scanner_config(dedup_ttl_min=30)
         pair = make_raw_pair()
-        client = make_fake_client([pair])
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
@@ -246,11 +414,14 @@ class TestDedup:
 
         cfg = make_scanner_config(dedup_ttl_min=30)
         pair = make_raw_pair()
-        client = make_fake_client([pair])
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
-        await scanner.scan()              # first scan — emits candidate
-        results = await scanner.scan()    # second scan — deduped
+        await scanner.scan()           # first scan — emits candidate
+        results = await scanner.scan() # second scan — deduped
 
         assert results == []
 
@@ -262,13 +433,18 @@ class TestDedup:
         pair1 = make_raw_pair(address="MINT_A", pair_address="PAIR_A")
         pair2 = make_raw_pair(address="MINT_B", pair_address="PAIR_B")
 
-        client1 = make_fake_client([pair1])
-        client2 = make_fake_client([pair2])
+        client1 = make_fake_client(
+            addresses=["MINT_A"],
+            pairs_by_mint={"MINT_A": [pair1]},
+        )
+        client2 = make_fake_client(
+            addresses=["MINT_B"],
+            pairs_by_mint={"MINT_B": [pair2]},
+        )
 
         scanner = Scanner(client=client1, cfg=cfg)
         r1 = await scanner.scan()
 
-        # Swap the underlying client to simulate second scan with different pair
         scanner._client = client2
         r2 = await scanner.scan()
 
@@ -283,23 +459,45 @@ class TestDedup:
 
         cfg = make_scanner_config(dedup_ttl_min=30)
         pair = make_raw_pair()
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
-        client = make_fake_client([pair])
         scanner = Scanner(client=client, cfg=cfg)
-
-        # First scan — emits
         r1 = await scanner.scan()
         assert len(r1) == 1
 
         # Manually expire the seen-set by backdating the entry
         mint = pair["baseToken"]["address"]
-        # Set first-seen time to 31 minutes ago (past TTL)
         past_ts = time.time() - (31 * 60)
         scanner._seen[mint] = past_ts
 
-        # Second scan — should emit again because TTL expired
         r2 = await scanner.scan()
         assert len(r2) == 1
+
+    async def test_already_seen_mint_skips_get_token_pairs_call(self):
+        """When a mint is in the dedup cache, get_token_pairs is not called for it."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config(dedup_ttl_min=30)
+        pair = make_raw_pair()
+
+        call_count = {"n": 0}
+        async def counting_get_pairs(mint: str) -> list[dict]:
+            call_count["n"] += 1
+            return [pair]
+
+        client = AsyncMock()
+        client.fetch_latest_token_addresses = AsyncMock(return_value=["MINT_AAA"])
+        client.get_token_pairs = AsyncMock(side_effect=counting_get_pairs)
+
+        scanner = Scanner(client=client, cfg=cfg)
+        await scanner.scan()          # first — calls get_token_pairs once
+        assert call_count["n"] == 1
+
+        await scanner.scan()          # second — MINT_AAA already seen, skip
+        assert call_count["n"] == 1   # no additional call
 
 
 # ---------------------------------------------------------------------------
@@ -307,37 +505,82 @@ class TestDedup:
 # ---------------------------------------------------------------------------
 
 class TestDataSourceErrorHandling:
-    async def test_datasource_error_returns_empty_list(self):
-        """When the client raises DataSourceError, scan() returns [] without propagating."""
+    async def test_fetch_latest_raises_returns_empty_list(self):
+        """When fetch_latest_token_addresses raises DataSourceError, scan() returns []."""
         from memedog.scanner.scanner import Scanner
 
         cfg = make_scanner_config()
-        client = AsyncMock()
-        client.fetch_solana_pairs = AsyncMock(side_effect=DataSourceError("network error"))
+        client = make_fake_client(
+            addresses=[],
+            pairs_by_mint={},
+            address_error=DataSourceError("network error"),
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
 
         assert results == []
 
-    async def test_datasource_error_does_not_raise(self):
-        """scan() must never propagate DataSourceError to the caller."""
+    async def test_fetch_latest_raises_does_not_propagate(self):
+        """scan() must never propagate DataSourceError from fetch_latest."""
         from memedog.scanner.scanner import Scanner
 
         cfg = make_scanner_config()
-        client = AsyncMock()
-        client.fetch_solana_pairs = AsyncMock(side_effect=DataSourceError("boom"))
+        client = make_fake_client(
+            addresses=[],
+            pairs_by_mint={},
+            address_error=DataSourceError("boom"),
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
-        # Must not raise
         try:
             await scanner.scan()
         except DataSourceError:
             pytest.fail("scan() propagated DataSourceError to caller")
 
+    async def test_get_token_pairs_raises_skips_that_token_others_processed(self):
+        """When get_token_pairs raises for one mint, the others are still processed."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        good_pair = make_raw_pair(address="MINT_GOOD", pair_address="PAIR_GOOD",
+                                  liquidity_usd=25_000, volume_m5=500, age_min=15)
+        client = make_fake_client(
+            addresses=["MINT_ERR", "MINT_GOOD"],
+            pairs_by_mint={"MINT_GOOD": [good_pair]},
+            pair_errors={"MINT_ERR": DataSourceError("timeout")},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert results[0].mint == "MINT_GOOD"
+
+    async def test_get_token_pairs_raises_does_not_abort_scan(self):
+        """A DataSourceError from get_token_pairs for one token does not raise."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        client = make_fake_client(
+            addresses=["MINT_A", "MINT_B"],
+            pairs_by_mint={},
+            pair_errors={
+                "MINT_A": DataSourceError("fail A"),
+                "MINT_B": DataSourceError("fail B"),
+            },
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        try:
+            results = await scanner.scan()
+            assert results == []
+        except DataSourceError:
+            pytest.fail("scan() propagated DataSourceError to caller")
+
 
 # ---------------------------------------------------------------------------
-# Fix 1 — missing baseToken must not crash the scan
+# Malformed pair / token handling
 # ---------------------------------------------------------------------------
 
 class TestMalformedPairs:
@@ -347,8 +590,8 @@ class TestMalformedPairs:
 
         cfg = make_scanner_config()
         good = make_raw_pair(address="MINT_GOOD", pair_address="PAIR_GOOD")
-        # Pair missing baseToken entirely
         bad = {
+            "chainId": "solana",
             "pairAddress": "PAIR_BAD",
             "priceUsd": "0.001",
             "liquidity": {"usd": 25_000.0},
@@ -356,19 +599,27 @@ class TestMalformedPairs:
             "volume": {"m5": 500.0, "h1": 3_000.0},
             "txns": {"m5": {"buys": 20, "sells": 8}},
             "priceChange": {"m5": 3.5},
-            "pairCreatedAt": good["pairCreatedAt"],  # same age so it passes prefilter
+            "pairCreatedAt": good["pairCreatedAt"],
         }
-        client = make_fake_client([good, bad])
+        # "MINT_GOOD" returns both; the bad pair is for another address
+        client = make_fake_client(
+            addresses=["MINT_GOOD", "MINT_BAD"],
+            pairs_by_mint={
+                "MINT_GOOD": [good],
+                "MINT_BAD": [bad],
+            },
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
 
+        # Only the good pair survives; bad pair has no baseToken so it's skipped
         assert len(results) == 1
         assert results[0].mint == "MINT_GOOD"
 
 
 # ---------------------------------------------------------------------------
-# Fix 3 — configurable chain
+# Configurable chain
 # ---------------------------------------------------------------------------
 
 class TestConfigurableChain:
@@ -376,19 +627,22 @@ class TestConfigurableChain:
         """TokenCandidate.chain is set from ScannerConfig.chain, not hardcoded."""
         from memedog.scanner.scanner import Scanner
 
-        cfg = make_scanner_config(chain="ethereum")
+        cfg = make_scanner_config(chain="solana")
         pair = make_raw_pair()
-        client = make_fake_client([pair])
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
 
         scanner = Scanner(client=client, cfg=cfg)
         results = await scanner.scan()
 
         assert len(results) == 1
-        assert results[0].chain == "ethereum"
+        assert results[0].chain == "solana"
 
 
 # ---------------------------------------------------------------------------
-# Fix 10 — naive datetime rejected at model boundary
+# Aware datetime enforcement (model boundary)
 # ---------------------------------------------------------------------------
 
 class TestAwareDatetimeEnforcement:
@@ -406,7 +660,7 @@ class TestAwareDatetimeEnforcement:
                 mint="mintABC",
                 pair_address="pairXYZ",
                 symbol="DOG",
-                pair_created_at=datetime(2024, 1, 1, 12, 0, 0),  # naive — no tzinfo
+                pair_created_at=datetime(2024, 1, 1, 12, 0, 0),  # naive
                 price_usd=0.0001,
                 liquidity_usd=15000.0,
                 fdv_usd=500000.0,

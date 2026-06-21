@@ -1,10 +1,11 @@
-"""Tests for Task 1: DexScreenerClient."""
+"""Tests for DexScreenerClient — new discovery methods + get_token_price."""
 import httpx
 import pytest
 import respx
 
 
 SAMPLE_PAIR = {
+    "chainId": "solana",
     "baseToken": {"address": "So11111111111111111111111111111111111111112", "symbol": "SOL"},
     "pairAddress": "PAIR123",
     "priceUsd": "1.23",
@@ -17,99 +18,216 @@ SAMPLE_PAIR = {
 }
 
 
-class TestFetchSolanaPairs:
-    async def test_returns_list_with_pairs(self):
-        """fetch_solana_pairs returns the pairs list from DexScreener response."""
+# ---------------------------------------------------------------------------
+# Task 1a — fetch_latest_token_addresses
+# ---------------------------------------------------------------------------
+
+class TestFetchLatestTokenAddresses:
+    """Tests for DexScreenerClient.fetch_latest_token_addresses."""
+
+    PROFILES_URL = "https://api.dexscreener.com/token-profiles/latest/v1"
+
+    async def test_returns_only_matching_chain_addresses(self):
+        """fetch_latest_token_addresses filters by chainId — only solana returned."""
         from memedog.clients.dexscreener import DexScreenerClient
 
-        payload = {"pairs": [SAMPLE_PAIR]}
+        profiles = [
+            {"chainId": "solana", "tokenAddress": "ADDR_SOL_1"},
+            {"chainId": "base", "tokenAddress": "ADDR_BASE_1"},
+            {"chainId": "solana", "tokenAddress": "ADDR_SOL_2"},
+            {"chainId": "ethereum", "tokenAddress": "ADDR_ETH_1"},
+        ]
 
         with respx.mock:
-            respx.get("https://api.dexscreener.com/latest/dex/search").mock(
-                return_value=httpx.Response(200, json=payload)
+            respx.get(self.PROFILES_URL).mock(
+                return_value=httpx.Response(200, json=profiles)
             )
             async with DexScreenerClient() as client:
-                result = await client.fetch_solana_pairs()
+                result = await client.fetch_latest_token_addresses("solana")
 
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0]["baseToken"]["address"] == "So11111111111111111111111111111111111111112"
+        assert result == ["ADDR_SOL_1", "ADDR_SOL_2"]
 
-    async def test_returns_empty_list_when_no_pairs_key(self):
-        """fetch_solana_pairs returns [] when response has no 'pairs' key."""
+    async def test_returns_empty_list_when_no_matching_chain(self):
+        """Returns [] when no profiles match the requested chain."""
         from memedog.clients.dexscreener import DexScreenerClient
 
-        payload = {"schemaVersion": "1.0.0"}
+        profiles = [
+            {"chainId": "base", "tokenAddress": "ADDR_BASE_1"},
+            {"chainId": "ethereum", "tokenAddress": "ADDR_ETH_1"},
+        ]
 
         with respx.mock:
-            respx.get("https://api.dexscreener.com/latest/dex/search").mock(
-                return_value=httpx.Response(200, json=payload)
+            respx.get(self.PROFILES_URL).mock(
+                return_value=httpx.Response(200, json=profiles)
             )
             async with DexScreenerClient() as client:
-                result = await client.fetch_solana_pairs()
+                result = await client.fetch_latest_token_addresses("solana")
 
         assert result == []
 
-    async def test_returns_multiple_pairs(self):
-        """fetch_solana_pairs returns all pairs in the response."""
+    async def test_returns_empty_list_when_response_is_not_list(self):
+        """Returns [] defensively when response is not a list (e.g. a dict)."""
         from memedog.clients.dexscreener import DexScreenerClient
-
-        pair2 = dict(SAMPLE_PAIR)
-        pair2 = {**SAMPLE_PAIR, "pairAddress": "PAIR456"}
-        payload = {"pairs": [SAMPLE_PAIR, pair2]}
 
         with respx.mock:
-            respx.get("https://api.dexscreener.com/latest/dex/search").mock(
-                return_value=httpx.Response(200, json=payload)
+            respx.get(self.PROFILES_URL).mock(
+                return_value=httpx.Response(200, json={"error": "unexpected"})
             )
             async with DexScreenerClient() as client:
-                result = await client.fetch_solana_pairs()
+                result = await client.fetch_latest_token_addresses("solana")
 
-        assert len(result) == 2
+        assert result == []
 
-    async def test_uses_correct_base_url(self):
-        """DexScreenerClient uses https://api.dexscreener.com as base URL."""
+    async def test_returns_empty_list_when_profile_missing_keys(self):
+        """Profiles missing chainId or tokenAddress are skipped gracefully."""
         from memedog.clients.dexscreener import DexScreenerClient
 
-        client = DexScreenerClient()
-        assert client._base_url == "https://api.dexscreener.com"
-        await client.aclose()
+        profiles = [
+            {"chainId": "solana"},                           # missing tokenAddress
+            {"tokenAddress": "ADDR_NO_CHAIN"},               # missing chainId
+            {"chainId": "solana", "tokenAddress": "GOOD"},   # valid
+        ]
 
-    async def test_query_includes_solana_param(self):
-        """fetch_solana_pairs queries with q=solana."""
+        with respx.mock:
+            respx.get(self.PROFILES_URL).mock(
+                return_value=httpx.Response(200, json=profiles)
+            )
+            async with DexScreenerClient() as client:
+                result = await client.fetch_latest_token_addresses("solana")
+
+        assert result == ["GOOD"]
+
+    async def test_returns_empty_list_on_empty_response(self):
+        """Returns [] when server returns an empty list."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        with respx.mock:
+            respx.get(self.PROFILES_URL).mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            async with DexScreenerClient() as client:
+                result = await client.fetch_latest_token_addresses("solana")
+
+        assert result == []
+
+    async def test_propagates_data_source_error_on_http_failure(self):
+        """fetch_latest_token_addresses raises DataSourceError on HTTP errors."""
+        from memedog.clients.base import DataSourceError
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        with respx.mock:
+            respx.get(self.PROFILES_URL).mock(
+                return_value=httpx.Response(500, text="Internal Server Error")
+            )
+            async with DexScreenerClient(max_retries=1) as client:
+                with pytest.raises(DataSourceError):
+                    await client.fetch_latest_token_addresses("solana")
+
+
+# ---------------------------------------------------------------------------
+# Task 1b — get_token_pairs
+# ---------------------------------------------------------------------------
+
+class TestGetTokenPairs:
+    """Tests for DexScreenerClient.get_token_pairs."""
+
+    MINT = "So11111111111111111111111111111111111111112"
+
+    def _pairs_url(self):
+        return f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
+
+    async def test_returns_pairs_array(self):
+        """get_token_pairs returns the pairs list from the API response."""
         from memedog.clients.dexscreener import DexScreenerClient
 
         payload = {"pairs": [SAMPLE_PAIR]}
-        captured_request = {}
-
-        def capture(request):
-            captured_request["params"] = dict(request.url.params)
-            return httpx.Response(200, json=payload)
 
         with respx.mock:
-            respx.get("https://api.dexscreener.com/latest/dex/search").mock(
-                side_effect=capture
+            respx.get(self._pairs_url()).mock(
+                return_value=httpx.Response(200, json=payload)
             )
             async with DexScreenerClient() as client:
-                await client.fetch_solana_pairs()
+                result = await client.get_token_pairs(self.MINT)
 
-        assert captured_request["params"].get("q") == "solana"
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["pairAddress"] == "PAIR123"
 
-    async def test_returns_empty_list_when_pairs_is_null(self):
-        """fetch_solana_pairs returns [] when response has pairs=null (Fix 2)."""
+    async def test_returns_empty_list_when_pairs_null(self):
+        """get_token_pairs returns [] when pairs is null."""
         from memedog.clients.dexscreener import DexScreenerClient
 
         payload = {"pairs": None}
 
         with respx.mock:
-            respx.get("https://api.dexscreener.com/latest/dex/search").mock(
+            respx.get(self._pairs_url()).mock(
                 return_value=httpx.Response(200, json=payload)
             )
             async with DexScreenerClient() as client:
-                result = await client.fetch_solana_pairs()
+                result = await client.get_token_pairs(self.MINT)
 
         assert result == []
 
+    async def test_returns_empty_list_when_pairs_missing(self):
+        """get_token_pairs returns [] when response has no 'pairs' key."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {"schemaVersion": "1.0.0"}
+
+        with respx.mock:
+            respx.get(self._pairs_url()).mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            async with DexScreenerClient() as client:
+                result = await client.get_token_pairs(self.MINT)
+
+        assert result == []
+
+    async def test_returns_empty_list_when_pairs_empty(self):
+        """get_token_pairs returns [] when pairs array is empty."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        payload = {"pairs": []}
+
+        with respx.mock:
+            respx.get(self._pairs_url()).mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            async with DexScreenerClient() as client:
+                result = await client.get_token_pairs(self.MINT)
+
+        assert result == []
+
+    async def test_returns_empty_list_when_response_not_dict(self):
+        """get_token_pairs returns [] when response is not a dict."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        with respx.mock:
+            respx.get(self._pairs_url()).mock(
+                return_value=httpx.Response(200, json=[SAMPLE_PAIR])
+            )
+            async with DexScreenerClient() as client:
+                result = await client.get_token_pairs(self.MINT)
+
+        assert result == []
+
+    async def test_propagates_data_source_error_on_http_failure(self):
+        """get_token_pairs raises DataSourceError on HTTP errors."""
+        from memedog.clients.base import DataSourceError
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        with respx.mock:
+            respx.get(self._pairs_url()).mock(
+                return_value=httpx.Response(500, text="Internal Server Error")
+            )
+            async with DexScreenerClient(max_retries=1) as client:
+                with pytest.raises(DataSourceError):
+                    await client.get_token_pairs(self.MINT)
+
+
+# ---------------------------------------------------------------------------
+# get_token_price tests (unchanged — keep as-is)
+# ---------------------------------------------------------------------------
 
 class TestGetTokenPrice:
     """Tests for DexScreenerClient.get_token_price."""
@@ -215,3 +333,11 @@ class TestGetTokenPrice:
             async with DexScreenerClient(max_retries=1) as client:
                 with pytest.raises(DataSourceError):
                     await client.get_token_price(self.MINT)
+
+    async def test_uses_correct_base_url(self):
+        """DexScreenerClient uses https://api.dexscreener.com as base URL."""
+        from memedog.clients.dexscreener import DexScreenerClient
+
+        client = DexScreenerClient()
+        assert client._base_url == "https://api.dexscreener.com"
+        await client.aclose()
