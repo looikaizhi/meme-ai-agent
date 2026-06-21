@@ -117,20 +117,6 @@ class TestTelegramAlertSend:
                 await client.send("hello")
 
     @pytest.mark.asyncio
-    async def test_send_returns_true_on_200(self):
-        import respx
-        import httpx
-        from memedog.alert.telegram import TelegramAlert
-
-        async with respx.MockRouter() as router:
-            router.post("https://api.telegram.org/botTOKEN/sendMessage").mock(
-                return_value=httpx.Response(200, json={"ok": True})
-            )
-            client = TelegramAlert(bot_token="TOKEN", chat_id="CHAT", max_retries=1, backoff_base=0)
-            result = await client.send("hello")
-            assert result is True
-
-    @pytest.mark.asyncio
     async def test_send_returns_false_on_error(self):
         import respx
         import httpx

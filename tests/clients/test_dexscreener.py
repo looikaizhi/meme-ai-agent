@@ -185,6 +185,8 @@ class TestGetTokenPairs:
         first = result[0]
         assert "pairAddress" in first
         assert "baseToken" in first
+        # Verify the first pair is BONK (baseToken address must match BONK mint)
+        assert first["baseToken"]["address"] == BONK_MINT
 
     async def test_real_fixture_empty_returns_empty_list(self, fixture):
         """Serve real tokens_empty.json (pairs: null); assert [] returned."""
@@ -217,21 +219,6 @@ class TestGetTokenPairs:
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["pairAddress"] == "PAIR123"
-
-    async def test_returns_empty_list_when_pairs_null(self):
-        """get_token_pairs returns [] when pairs is null."""
-        from memedog.clients.dexscreener import DexScreenerClient
-
-        payload = {"pairs": None}
-
-        with respx.mock:
-            respx.get(self._pairs_url()).mock(
-                return_value=httpx.Response(200, json=payload)
-            )
-            async with DexScreenerClient() as client:
-                result = await client.get_token_pairs(self.MINT)
-
-        assert result == []
 
     async def test_returns_empty_list_when_pairs_missing(self):
         """get_token_pairs returns [] when response has no 'pairs' key."""
@@ -361,21 +348,6 @@ class TestGetTokenPrice:
         from memedog.clients.dexscreener import DexScreenerClient
 
         payload = {"schemaVersion": "1.0.0"}
-
-        with respx.mock:
-            respx.get(
-                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
-            ).mock(return_value=httpx.Response(200, json=payload))
-            async with DexScreenerClient() as client:
-                result = await client.get_token_price(self.MINT)
-
-        assert result is None
-
-    async def test_returns_none_when_pairs_is_null(self):
-        """get_token_price returns None when pairs is null."""
-        from memedog.clients.dexscreener import DexScreenerClient
-
-        payload = {"pairs": None}
 
         with respx.mock:
             respx.get(

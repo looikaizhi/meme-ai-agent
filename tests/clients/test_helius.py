@@ -76,6 +76,12 @@ class TestGetLargestHolders:
         ok_data = fixture("helius/largest_accounts_ok.json")
         expected_count = len(ok_data["result"]["value"])
 
+        # Compute expected top10_pct from fixture data
+        accounts = ok_data["result"]["value"]
+        top_10_sum = sum(acc["uiAmount"] for acc in accounts[:10])
+        total_sum = sum(acc["uiAmount"] for acc in accounts)
+        expected_top10_pct = (top_10_sum / total_sum * 100) if total_sum > 0 else None
+
         with respx.mock:
             respx.post(BASE_URL).mock(
                 return_value=httpx.Response(200, json=ok_data)
@@ -85,6 +91,7 @@ class TestGetLargestHolders:
 
         assert isinstance(result["top10_pct"], float)
         assert 0 < result["top10_pct"] <= 100
+        assert result["top10_pct"] == pytest.approx(expected_top10_pct)
         assert isinstance(result["max_wallet_pct"], float)
         assert 0 < result["max_wallet_pct"] <= 100
         assert result["holder_count"] == expected_count
