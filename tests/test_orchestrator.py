@@ -644,3 +644,122 @@ async def test_run_cycle_funnel_event_no_crash_on_save_failure(
     # Must not raise even though save_funnel_event raises
     signals = await orch.run_cycle()
     assert len(signals) == 1  # cycle still completes
+
+
+class TestPipelineEventEmission:
+    @pytest.mark.asyncio
+    async def test_run_cycle_emits_stage_events(self, tmp_path):
+        from memedog.store import Store
+        from memedog.orchestrator import Orchestrator
+        from memedog.models import (
+            TokenCandidate, TokenSnapshot, SafetyInfo, HolderInfo,
+            MomentumInfo, SocialInfo, Score, DimensionScore, Signal, SignalType,
+        )
+        from memedog.config import load_config
+
+        cand = TokenCandidate(
+            mint="M1", pair_address="P", symbol="DOGX", chain="solana",
+            pair_created_at=datetime(2024, 1, 1, tzinfo=timezone.utc), price_usd=0.001,
+            liquidity_usd=40000, fdv_usd=120000, volume_5m=15000, volume_1h=80000,
+            txns_5m_buys=40, txns_5m_sells=10, price_change_5m=5.0, trace_id="tr1",
+        )
+        snap = TokenSnapshot(
+            candidate=cand,
+            safety=SafetyInfo(available=True, rug_trust_score=88),
+            holders=HolderInfo(available=True, top10_pct=20.0),
+            momentum=MomentumInfo(available=True, liquidity_usd=40000, volume_5m=15000),
+            social=SocialInfo(available=True, smart_money_buys=3),
+            enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        score = Score(mint="M1", total=75.0, trace_id="tr1", dimensions=[
+            DimensionScore(name="safety", raw=88, weight=0.35, weighted=30.8),
+        ])
+        signal = Signal(
+            mint="M1", symbol="DOGX", signal=SignalType.BULLISH, confidence=0.8,
+            score_total=75.0, bull_points=[], bear_points=[], red_flags=[],
+            rationale="ok", created_at=datetime(2024, 1, 1, tzinfo=timezone.utc), trace_id="tr1",
+        )
+
+        class _Scanner:
+            async def scan(self): return [cand]
+        class _HF:
+            dropped = []; flagged = []
+            async def apply(self, c): return list(c)
+        class _Enr:
+            async def enrich(self, c): return snap
+        class _SE:
+            def score(self, s): return score
+        class _Judge:
+            async def judge(self, s, sc): return signal
+        class _PT:
+            def on_signal(self, sig, entry_price=None): return None
+
+        store = Store(str(tmp_path / "o.db"))
+        try:
+            orch = Orchestrator(
+                scanner=_Scanner(), hardfilter=_HF(), enricher=_Enr(),
+                score_engine=_SE(), llm_judge=_Judge(), paper_trader=_PT(),
+                store=store, cfg=load_config(),
+            )
+            await orch.run_cycle()
+            stages = [e["stage"] for e in store.recent_events(limit=50)]
+        finally:
+            store.close()
+
+        for expected in ["scan", "hardfilter", "score", "judge", "signal"]:
+            assert expected in stages, f"missing stage event: {expected}"
+
+    @pytest.mark.asyncio
+    async def test_run_cycle_survives_save_event_failure(self, tmp_path):
+        from memedog.orchestrator import Orchestrator
+        from memedog.config import load_config
+        from memedog.models import (
+            TokenCandidate, TokenSnapshot, SafetyInfo, HolderInfo,
+            MomentumInfo, SocialInfo, Score, DimensionScore, Signal, SignalType,
+        )
+
+        cand = TokenCandidate(
+            mint="M1", pair_address="P", symbol="DOGX", chain="solana",
+            pair_created_at=datetime(2024, 1, 1, tzinfo=timezone.utc), price_usd=0.001,
+            liquidity_usd=40000, fdv_usd=120000, volume_5m=15000, volume_1h=80000,
+            txns_5m_buys=40, txns_5m_sells=10, price_change_5m=5.0, trace_id="tr1",
+        )
+        snap = TokenSnapshot(
+            candidate=cand, safety=SafetyInfo(available=True, rug_trust_score=88),
+            holders=HolderInfo(available=True, top10_pct=20.0),
+            momentum=MomentumInfo(available=True, liquidity_usd=40000, volume_5m=15000),
+            social=SocialInfo(available=True), enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        score = Score(mint="M1", total=75.0, trace_id="tr1",
+                      dimensions=[DimensionScore(name="safety", raw=88, weight=1.0, weighted=88)])
+        signal = Signal(mint="M1", symbol="DOGX", signal=SignalType.BULLISH, confidence=0.8,
+                        score_total=75.0, bull_points=[], bear_points=[], red_flags=[],
+                        rationale="ok", created_at=datetime(2024, 1, 1, tzinfo=timezone.utc), trace_id="tr1")
+
+        class _Scanner:
+            async def scan(self): return [cand]
+        class _HF:
+            dropped = []; flagged = []
+            async def apply(self, c): return list(c)
+        class _Enr:
+            async def enrich(self, c): return snap
+        class _SE:
+            def score(self, s): return score
+        class _Judge:
+            async def judge(self, s, sc): return signal
+        class _PT:
+            def on_signal(self, sig, entry_price=None): return None
+
+        class _BrokenStore:
+            def save_event(self, *a, **k): raise RuntimeError("db down")
+            def save_snapshot(self, *a, **k): pass
+            def save_signal(self, *a, **k): pass
+            def save_funnel_event(self, *a, **k): pass
+
+        orch = Orchestrator(
+            scanner=_Scanner(), hardfilter=_HF(), enricher=_Enr(),
+            score_engine=_SE(), llm_judge=_Judge(), paper_trader=_PT(),
+            store=_BrokenStore(), cfg=load_config(),
+        )
+        signals = await orch.run_cycle()
+        assert len(signals) == 1
