@@ -134,6 +134,26 @@ class AlertConfig(BaseModel):
     min_confidence: float
 
 
+class HTTPClientPolicy(BaseModel):
+    timeout_sec: float = 10.0
+    max_retries: int = 3
+    backoff_base_sec: float = 0.2
+    max_backoff_sec: float = 10.0
+    max_concurrency: int = 4
+    min_interval_sec: float = 0.0
+    retry_status_codes: list[int] = [429, 500, 502, 503, 504]
+
+
+class HTTPConfig(BaseModel):
+    default: HTTPClientPolicy = HTTPClientPolicy()
+    # overrides hold partial-field dicts so unspecified fields fall back to default
+    overrides: dict[str, dict] = {}
+
+    def policy_for(self, source: str) -> HTTPClientPolicy:
+        ov = self.overrides.get(source)
+        return self.default.model_copy(update=ov) if ov else self.default
+
+
 # ---------------------------------------------------------------------------
 # Settings (secrets from .env)
 # ---------------------------------------------------------------------------
@@ -167,6 +187,7 @@ class Config(BaseModel):
     llmjudge: LLMJudgeConfig
     papertrader: PaperTraderConfig
     alert: AlertConfig
+    http: HTTPConfig = HTTPConfig()
     settings: Settings
 
 
@@ -189,5 +210,6 @@ def load_config(yaml_path: str | Path | None = None) -> Config:
         llmjudge=LLMJudgeConfig.model_validate(raw["llmjudge"]),
         papertrader=PaperTraderConfig.model_validate(raw["papertrader"]),
         alert=AlertConfig.model_validate(raw["alert"]),
+        http=HTTPConfig.model_validate(raw.get("http", {})),
         settings=Settings(),
     )

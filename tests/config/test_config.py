@@ -206,3 +206,41 @@ class TestLoadConfig:
         yaml_holders = _THRESHOLDS["scoring"]["holders"]
         assert cfg.scoring.holders.holder_count_full_at == yaml_holders["holder_count_full_at"]
         assert cfg.scoring.holders.sniper_zero_at == yaml_holders["sniper_zero_at"]
+
+
+class TestHTTPConfig:
+    def test_http_section_present(self):
+        from memedog.config.settings import HTTPConfig, load_config
+
+        cfg = load_config()
+        assert isinstance(cfg.http, HTTPConfig)
+
+    def test_policy_for_merges_override_onto_default(self):
+        from memedog.config.settings import HTTPConfig
+
+        http = HTTPConfig(
+            default={"max_concurrency": 4, "min_interval_sec": 0.0, "timeout_sec": 10},
+            overrides={"helius": {"min_interval_sec": 0.2}},
+        )
+        pol = http.policy_for("helius")
+        assert pol.min_interval_sec == 0.2   # from override
+        assert pol.max_concurrency == 4      # inherited from default
+        assert pol.timeout_sec == 10         # inherited from default
+
+    def test_policy_for_unknown_source_returns_default(self):
+        from memedog.config.settings import HTTPConfig
+
+        http = HTTPConfig(default={"max_concurrency": 7})
+        assert http.policy_for("nope").max_concurrency == 7
+
+    def test_load_config_without_http_section_uses_defaults(self, tmp_path):
+        """A yaml missing the http section must still load (backward compat)."""
+        import yaml
+        from memedog.config.settings import load_config
+
+        raw = yaml.safe_load(_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+        raw.pop("http", None)
+        p = tmp_path / "no_http.yaml"
+        p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+        cfg2 = load_config(p)
+        assert cfg2.http.default.max_retries >= 1
