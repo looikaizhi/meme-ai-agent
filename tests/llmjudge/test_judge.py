@@ -183,14 +183,17 @@ async def test_judge_happy_path_bullish_real_fixtures(fixture):
     assert result.symbol == "DOGX"
     # Verify against REAL fixture values
     assert result.signal == SignalType.BULLISH
-    assert result.confidence == pytest.approx(0.78)  # from judge_bullish.json
+    # snapshot is fully available → completeness guard cap=1.0 → confidence unchanged
+    assert result.confidence == pytest.approx(judge_data["confidence"])
     assert result.score_total == pytest.approx(72.0)
     assert result.trace_id == "trace-1"
-    # Verify real fixture bull_points / bear_points / red_flags / rationale
+    # Verify real fixture bull_points / bear_points / red_flags
     assert result.bull_points == judge_data["bull_points"]
     assert result.bear_points == judge_data["bear_points"]
     assert result.red_flags == judge_data["red_flags"]
-    assert result.rationale == judge_data["rationale"]
+    # rationale now carries the folded workflow summary + the original rationale
+    assert judge_data["rationale"] in result.rationale
+    assert judge_data["workflow"][0]["step"] in result.rationale
 
 
 @pytest.mark.asyncio
@@ -207,11 +210,14 @@ async def test_judge_happy_path_bearish_real_fixtures(fixture):
     result = await judge.judge(_make_snapshot(), _make_score())
 
     assert result.signal == SignalType.BEARISH
-    assert result.confidence == pytest.approx(0.82)  # from judge_bearish.json
+    # snapshot is fully available → completeness guard cap=1.0 → confidence unchanged
+    assert result.confidence == pytest.approx(judge_data["confidence"])
     assert result.bull_points == judge_data["bull_points"]
     assert result.bear_points == judge_data["bear_points"]
     assert result.red_flags == judge_data["red_flags"]
-    assert result.rationale == judge_data["rationale"]
+    # rationale now carries the folded workflow summary + the original rationale
+    assert judge_data["rationale"] in result.rationale
+    assert judge_data["workflow"][0]["step"] in result.rationale
 
 
 @pytest.mark.asyncio
