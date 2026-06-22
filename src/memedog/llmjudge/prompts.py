@@ -167,24 +167,22 @@ def _missing_note(snapshot: TokenSnapshot) -> str:
 
 
 def bull_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
-    """Render a bullish advocate prompt for *snapshot* + *score*."""
+    """Render a bullish advocate prompt grounded in raw evidence."""
     symbol = snapshot.candidate.symbol
     mint = snapshot.candidate.mint
-    total = score.total
-    dim_summary = _dimension_summary(snapshot, score)
+    evidence = _snapshot_evidence(snapshot, score)
     missing_note = _missing_note(snapshot)
 
     system_content = (
-        "You are a bullish crypto analyst. Your job is to identify all positive signals "
-        "and reasons to BUY the token. Be specific and cite the data."
+        "You are a bullish crypto analyst. Identify all positive signals and reasons to BUY. "
+        "Cite concrete numbers from the evidence (引用证据中的具体数字). "
+        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty."
     )
     user_content = (
-        f"Analyze token {symbol} (mint: {mint}).\n"
-        f"Composite score: {total:.1f}/100\n\n"
-        f"Dimension scores:\n{dim_summary}"
+        f"Analyze token {symbol} (mint: {mint}).\n\n"
+        f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
-        "Make the strongest possible BULLISH case. List concrete bull points "
-        "supported by the data above."
+        "Make the strongest BULLISH case. Each bull point MUST cite a specific field/number above."
     )
     return [
         {"role": "system", "content": system_content},
@@ -193,24 +191,22 @@ def bull_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
 
 
 def bear_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
-    """Render a bearish advocate prompt for *snapshot* + *score*."""
+    """Render a bearish advocate prompt grounded in raw evidence."""
     symbol = snapshot.candidate.symbol
     mint = snapshot.candidate.mint
-    total = score.total
-    dim_summary = _dimension_summary(snapshot, score)
+    evidence = _snapshot_evidence(snapshot, score)
     missing_note = _missing_note(snapshot)
 
     system_content = (
-        "You are a bearish crypto analyst / risk officer. Your job is to identify all "
-        "risks, red flags, and reasons to AVOID the token. Be specific and cite the data."
+        "You are a bearish crypto analyst / risk officer. Identify all risks, red flags, and "
+        "reasons to AVOID. Cite concrete numbers from the evidence (引用证据中的具体数字). "
+        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty."
     )
     user_content = (
-        f"Analyze token {symbol} (mint: {mint}).\n"
-        f"Composite score: {total:.1f}/100\n\n"
-        f"Dimension scores:\n{dim_summary}"
+        f"Analyze token {symbol} (mint: {mint}).\n\n"
+        f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
-        "Make the strongest possible BEARISH case. List concrete bear points "
-        "and red flags supported by the data above."
+        "Make the strongest BEARISH case. Each bear point / red flag MUST cite a specific field/number above."
     )
     return [
         {"role": "system", "content": system_content},

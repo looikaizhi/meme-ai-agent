@@ -180,6 +180,25 @@ def test_bull_prompt_returns_list_of_messages(snapshot_all_available, score):
         assert "role" in m and "content" in m
 
 
+def test_bull_prompt_injects_raw_evidence(snapshot_rich, score):
+    msgs = bull_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "42,300" in all_text          # raw liquidity present
+    assert "top10" in all_text
+
+
+def test_bull_prompt_demands_data_citation(snapshot_rich, score):
+    msgs = bull_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs).lower()
+    assert "cite" in all_text or "引用" in all_text
+
+
+def test_bear_prompt_injects_raw_evidence(snapshot_rich, score):
+    msgs = bear_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "42,300" in all_text
+
+
 # ---------------------------------------------------------------------------
 # bear_prompt tests
 # ---------------------------------------------------------------------------
