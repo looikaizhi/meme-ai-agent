@@ -5,7 +5,6 @@ LLMJudge orchestrates the three-role debate and maps the output to Signal.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -157,20 +156,23 @@ class LLMJudge:
             b_msgs = bull_prompt(snapshot, score)
             r_msgs = bear_prompt(snapshot, score)
 
-            # Run bull and bear concurrently
-            bull_text, bear_text = await asyncio.gather(
-                bull_provider.complete(
-                    model=bull_model,
-                    messages=b_msgs,
-                    temperature=bull_temp,
-                    max_tokens=self._cfg.max_tokens,
-                ),
-                bear_provider.complete(
-                    model=bear_model,
-                    messages=r_msgs,
-                    temperature=bear_temp,
-                    max_tokens=self._cfg.max_tokens,
-                ),
+            # Run bull then bear SEQUENTIALLY (not concurrently).
+            # The codex CLI runs against a single ChatGPT subscription; two
+            # simultaneous subprocesses get server-side throttled/queued, which
+            # in practice makes each call hang past the timeout. Sequential calls
+            # let each one use full throughput. Call order (bull=0, bear=1,
+            # judge=2) is preserved for FakeProvider index-based tests.
+            bull_text = await bull_provider.complete(
+                model=bull_model,
+                messages=b_msgs,
+                temperature=bull_temp,
+                max_tokens=self._cfg.max_tokens,
+            )
+            bear_text = await bear_provider.complete(
+                model=bear_model,
+                messages=r_msgs,
+                temperature=bear_temp,
+                max_tokens=self._cfg.max_tokens,
             )
 
             j_msgs = judge_prompt(snapshot, score, bull_text, bear_text)
