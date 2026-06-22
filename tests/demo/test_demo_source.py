@@ -29,6 +29,33 @@ async def test_replay_provider_never_exhausts():
 
 
 @pytest.mark.asyncio
+async def test_demo_enricher_returns_snapshot_offline():
+    from memedog.demo.demo_source import DemoScanner, DemoEnricher
+    cand = (await DemoScanner().scan())[0]
+    snap = await DemoEnricher().enrich(cand)
+    assert snap.candidate.mint == cand.mint
+    assert snap.safety.available and snap.momentum.available
+
+
+@pytest.mark.asyncio
+async def test_demo_rugcheck_report_parses_and_passes_authorities():
+    from memedog.demo.demo_source import DemoRugCheckClient
+    from memedog.clients.rugcheck import parse_report
+    raw = await DemoRugCheckClient().get_token_report("anymint")
+    parsed = parse_report(raw)
+    assert parsed["mint_authority_revoked"] is True
+    assert parsed["freeze_authority_revoked"] is True
+
+
+@pytest.mark.asyncio
+async def test_demo_price_fn_returns_float():
+    from memedog.demo.demo_source import build_demo_price_fn
+    fn = build_demo_price_fn()
+    price = await fn("anymint")
+    assert isinstance(price, float) and price > 0
+
+
+@pytest.mark.asyncio
 async def test_replay_provider_drives_real_judge():
     """ReplayProvider plugged into the real LLMJudge yields a real Signal."""
     from memedog.llmjudge.judge import LLMJudge

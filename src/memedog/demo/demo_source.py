@@ -100,3 +100,42 @@ def build_demo_snapshot(candidate: TokenCandidate) -> TokenSnapshot:
         social=SocialInfo(available=True, smart_money_buys=4),
         enriched_at=datetime.now(tz=timezone.utc),
     )
+
+
+class DemoEnricher:
+    """Offline enricher: returns build_demo_snapshot (no network)."""
+
+    async def enrich(self, candidate: TokenCandidate) -> TokenSnapshot:
+        return build_demo_snapshot(candidate)
+
+
+# Minimal raw RugCheck report shaped so parse_report() yields revoked authorities
+# + low risk + locked LP. Field names mirror the real RugCheck API response:
+#   mintAuthority/freezeAuthority = None  → revoked
+#   markets[].lp.lpLockedPct >= 90        → LP locked/burned
+_DEMO_RUGCHECK_RAW = {
+    "mintAuthority": None,
+    "freezeAuthority": None,
+    "score": 88,
+    "score_normalised": 88,
+    "risks": [],
+    "markets": [{"lp": {"lpLockedPct": 100}}],
+    "topHolders": [],
+}
+
+
+class DemoRugCheckClient:
+    """Offline RugCheck stub for HardFilter in demo mode."""
+
+    async def get_token_report(self, mint: str) -> dict:
+        return dict(_DEMO_RUGCHECK_RAW)
+
+    async def aclose(self) -> None:
+        return None
+
+
+def build_demo_price_fn():
+    """Return an async price fn doing a small random walk (no network)."""
+    async def _price_fn(mint: str):
+        return round(0.001 * random.uniform(0.7, 1.6), 8)
+    return _price_fn
