@@ -1,195 +1,195 @@
-# 🐕‍🦺 MemeDog Radar
+# 🐕‍🦺 MemeDog Radar(金狗雷达)
 
-> **Solana meme-coin (“金狗 / golden-dog”) early-momentum monitoring & signal engine.**
-> A funnel pipeline that scans hundreds of fresh tokens, defuses rugs with hard rules, enriches survivors with on-chain data, scores them, and lets two LLM personas (Bull vs Bear) debate before a judge emits a **`BULLISH / BEARISH / NEUTRAL`** signal — then paper-trades the result and shows it on a live dashboard.
+> **Solana 链上 meme 币(“金狗”)早期动量监测与信号引擎。**
+> 一条漏斗式流水线:扫描数百个新盘 → 用硬规则排雷 → 对幸存者并行富化链上数据 → 量化打分 → 两个 LLM 角色(看多 Bull / 看空 Bear)辩论、再由裁决者终审 → 输出 **`BULLISH / BEARISH / NEUTRAL`** 信号 → 模拟交易跟踪虚拟盈亏 → 实时看板展示。
 
-**⚠️ Disclaimer:** Research / demo only. **Monitoring + signals + simulated (paper) trading. No real wallet, no real orders.** Not financial advice.
-
----
-
-## 1. TL;DR for judges
-
-| Question | Answer |
-|----------|--------|
-| **What stage does it target?** | The **“first momentum” window** of a meme coin — ~20 min to a few hours after launch (not millisecond sniping). |
-| **What's the core idea?** | A **funnel**: hundreds of candidates → a handful → only those few ever touch the (expensive) LLM. This makes multi-agent LLM reasoning affordable at high frequency. |
-| **Where's the AI?** | A provider-agnostic LLM layer runs a **Bull/Bear debate + a Judge verdict** over real on-chain data, anchored by a deterministic rule-based score. |
-| **How is it run cheaply?** | The default LLM backend is the **OpenAI Codex CLI as a subprocess**, riding a ChatGPT subscription → near-zero per-call cost. Swappable to Claude / OpenAI / DeepSeek via one config string. |
-| **Is it real?** | Yes — verified live against **DexScreener, RugCheck, Helius, Telegram, and Codex**. Tests are driven by **real captured API responses**, plus an opt-in live tier. |
+**⚠️ 免责声明:** 仅供研究 / 演示。**只做监控 + 信号 + 模拟交易(paper trading),不接真实钱包、不真实下单。** 非投资建议。
 
 ---
 
-## 2. The architecture at a glance
+## 1. 给评审的一句话速览
 
-The whole system is a **6-stage funnel**. Each stage is a single-responsibility module that talks to the next only through a typed data object — so any layer can be swapped or tuned independently.
+| 问题 | 回答 |
+|------|------|
+| **针对哪个阶段?** | meme 币的 **“初有动量”窗口** —— 发盘后约 20 分钟到几小时(不是毫秒级抢跑)。 |
+| **核心思想是什么?** | 一条**漏斗**:数百候选 → 个位数 → 只有这极少数才会触达(昂贵的)LLM。这让多 agent LLM 推理在高频场景下**可负担**。 |
+| **AI 在哪里?** | 一个 provider 无关的 LLM 层,基于真实链上数据跑 **Bull/Bear 双视角辩论 + 裁决终审**,并由确定性的规则打分作为客观锚点。 |
+| **怎么做到便宜?** | 默认 LLM 后端是把 **OpenAI Codex CLI 当子进程调用**,走 ChatGPT 订阅额度 → 近乎零按量成本。一行配置即可切换到 Claude / OpenAI / DeepSeek。 |
+| **是真的能跑吗?** | 是 —— 已对 **DexScreener、RugCheck、Helius、Telegram、Codex** 全部真实联网验证。测试由**真实抓取的 API 响应**驱动,另有可选的 live 真联网测试层。 |
+
+---
+
+## 2. 架构总览(一眼看懂)
+
+整个系统是一条 **六段漏斗**。每一段都是职责单一的模块,模块之间只通过**带类型的数据对象**通信 —— 因此任何一层都可独立替换或调参。
 
 ```
-                      hundreds / cycle
-  ┌─────────────┐    ──────────────────►   ┌──────────────┐   survivors (single digits)
+                      每轮数百个
+  ┌─────────────┐    ──────────────────►   ┌──────────────┐   幸存者(个位数)
   │ [1] Scanner │  TokenCandidate[]         │[2] HardFilter│  ──────────────────────────►
   └─────────────┘                           └──────────────┘
-   poll DexScreener                          3 red-line gates
-   prefilter "has momentum"                  (authority / concentration / liquidity)
-   dedup                                     drop the rest  ✂️
+   轮询 DexScreener                          三类红线闸门
+   初筛“有动量”                               (权限 / 集中度 / 流动性)
+   去重                                       其余丢弃 ✂️
                                                    │
         ┌──────────────────────────────────────────┘
         ▼
   ┌──────────────┐   TokenSnapshot   ┌───────────────┐   Score 0-100   ┌──────────────┐
   │ [3] Enricher │ ────────────────► │[4] ScoreEngine│ ──────────────► │ [5] LLMJudge │
   └──────────────┘                   └───────────────┘                 └──────────────┘
-   4 dims in parallel:                4-dim weighted score              Bull ⚔ Bear debate
-   safety / holders /                 (objective anchor)                + Judge verdict
-   momentum / social                                                    │
-   degrade-not-crash                                                    ▼
+   4 维并行富化:                      4 维加权打分                       Bull ⚔ Bear 辩论
+   安全 / 持币 /                      (客观锚点)                         + 裁决终审
+   动量 / 社交                                                          │
+   降级而非崩溃                                                         ▼
                                                               Signal: BULLISH / BEARISH / NEUTRAL
-                                                              + confidence + reasons + red_flags
+                                                              + confidence + 理由 + 红旗(red_flags)
                                                                          │
                                           ┌──────────────────────────────┤
                                           ▼                              ▼
                                   ┌────────────────┐            ┌──────────────────┐
-                                  │[6] PaperTrader │            │ Dashboard + Alert│
+                                  │[6] PaperTrader │            │  看板 + 告警       │
                                   └────────────────┘            └──────────────────┘
-                                   open virtual position         Streamlit board
-                                   TP / SL / timeout exit        + optional Telegram push
-                                   track virtual PnL
+                                   开虚拟仓                       Streamlit 看板
+                                   止盈/止损/超时平仓             + 可选 Telegram 推送
+                                   跟踪虚拟盈亏
 ```
 
-### What each layer actually does
+### 每一层具体做什么
 
-| # | Layer | One-line job | Input → Output | Key data sources | Code |
-|---|-------|--------------|----------------|------------------|------|
-| **1** | **Scanner** | Poll new pairs, keep only ones with early momentum, de-duplicate | `()` → `TokenCandidate[]` | DexScreener (free) | [`scanner/`](src/memedog/scanner/) |
-| **2** | **HardFilter** | Defuse rugs/honeypots with 3 objective red-line gates before spending any LLM | `TokenCandidate[]` → `TokenCandidate[]` | RugCheck | [`hardfilter/`](src/memedog/hardfilter/) |
-| **3** | **Enricher** | Fetch 4 signal dimensions **in parallel**, degrade gracefully on failure | `TokenCandidate` → `TokenSnapshot` | RugCheck · Helius RPC · DexScreener · X/Twitter | [`enricher/`](src/memedog/enricher/) |
-| **4** | **ScoreEngine** | Map the 4 dimensions to a weighted **0–100** score (objective anchor for the LLM) | `TokenSnapshot` → `Score` | pure logic, config-driven | [`scoring/`](src/memedog/scoring/) |
-| **5** | **LLMJudge** | Bull persona vs Bear persona debate → Judge synthesizes a structured verdict | `TokenSnapshot + Score` → `Signal` | LLM (Codex CLI default) | [`llmjudge/`](src/memedog/llmjudge/) |
-| **6** | **PaperTrader** | Open a virtual position, exit on take-profit / stop-loss / timeout, track PnL | `Signal` → `Position / TradeRecord` | DexScreener (price poll) | [`papertrader/`](src/memedog/papertrader/) |
-| **—** | **Dashboard / Alert** | Visualize the whole funnel + PnL; optionally push BULLISH signals to Telegram | reads the store | Streamlit · Telegram | [`dashboard/`](dashboard/) · [`alert/`](src/memedog/alert/) |
+| # | 层 | 一句话职责 | 输入 → 输出 | 主要数据源 | 代码 |
+|---|-----|-----------|------------|-----------|------|
+| **1** | **Scanner(扫描器)** | 轮询新盘,只留有早期动量的,并去重 | `()` → `TokenCandidate[]` | DexScreener(免费) | [`scanner/`](src/memedog/scanner/) |
+| **2** | **HardFilter(硬规则闸门)** | 在花任何 LLM 之前,用三类客观红线排掉 rug/蜜罐 | `TokenCandidate[]` → `TokenCandidate[]` | RugCheck | [`hardfilter/`](src/memedog/hardfilter/) |
+| **3** | **Enricher(数据富化)** | **并行**抓取 4 个信号维度,失败优雅降级 | `TokenCandidate` → `TokenSnapshot` | RugCheck · Helius RPC · DexScreener · X/Twitter | [`enricher/`](src/memedog/enricher/) |
+| **4** | **ScoreEngine(打分)** | 把 4 维映射成 **0–100** 加权分(给 LLM 的客观锚点) | `TokenSnapshot` → `Score` | 纯逻辑,配置驱动 | [`scoring/`](src/memedog/scoring/) |
+| **5** | **LLMJudge(裁决)** | 看多 vs 看空双角色辩论 → 裁决者综合出结构化信号 | `TokenSnapshot + Score` → `Signal` | LLM(默认 Codex CLI) | [`llmjudge/`](src/memedog/llmjudge/) |
+| **6** | **PaperTrader(模拟交易)** | 开虚拟仓,按止盈/止损/超时平仓,记录盈亏 | `Signal` → `Position / TradeRecord` | DexScreener(轮询价格) | [`papertrader/`](src/memedog/papertrader/) |
+| **—** | **Dashboard / Alert(看板/告警)** | 可视化整条漏斗与盈亏;可选地把 BULLISH 信号推到 Telegram | 读取存储 | Streamlit · Telegram | [`dashboard/`](dashboard/) · [`alert/`](src/memedog/alert/) |
 
-> The pieces are wired together by [`orchestrator.py`](src/memedog/orchestrator.py); typed data objects live in [`models/`](src/memedog/models/) ([data contracts](plan/08-data-contracts.md)).
-
----
-
-## 3. Why this design (the four principles)
-
-1. **Funnel = cost control.** Scanner emits hundreds per cycle; HardFilter cuts to single digits; only survivors reach Enricher + LLM. This is what makes a multi-agent LLM debate *viable* on a high-frequency meme-coin stream.
-2. **Data vs. judgment are separated.** Enricher only *fetches*, ScoreEngine only *scores*, LLMJudge only *reasons*. Each layer is independently testable and replaceable.
-3. **Provider-agnostic LLM.** Business code depends on an `LLMProvider` interface, never a vendor SDK. Routing is by model-string prefix:
-   - `codex:<model>` → **CodexCLIProvider** *(experiment default — runs `codex exec` as a subprocess on a ChatGPT subscription, zero per-call API cost)*
-   - `litellm:<provider>/<model>` → LiteLLM (Claude / OpenAI / DeepSeek) for comparison
-4. **Degrade, never crash.** Any single data source failing marks that dimension “unavailable” (score re-weights, LLM is told it's missing) — the pipeline keeps going. If the LLM itself is unreachable, LLMJudge falls back to a rule-based signal.
+> 各段由 [`orchestrator.py`](src/memedog/orchestrator.py) 串联;带类型的数据对象定义在 [`models/`](src/memedog/models/)(见[数据契约](plan/08-data-contracts.md))。
 
 ---
 
-## 4. The signal, concretely
+## 3. 为什么这样设计(四条原则)
 
-**Hard red lines** (any failure ⇒ dropped; all thresholds in [`config/thresholds.yaml`](src/memedog/config/thresholds.yaml), nothing hard-coded):
-
-- **Contract authority** — mint authority revoked · freeze authority revoked · LP burned/locked
-- **Holder concentration** — Top-10 (ex-LP) ≤ 35% · max wallet < 20% · dev < 10% · snipers not abnormal
-- **Liquidity / momentum** — liquidity ≥ $20k · 5-min volume floor · buy/sell ratio ≥ 1 · sane FDV/liquidity
-
-**Four scored dimensions** (weighted to 0–100):
-
-| Dimension | Primary source | Signal |
-|-----------|----------------|--------|
-| Safety / Rug | RugCheck (trustScore, riskLevel) | can it be sold? is it a honeypot? |
-| Holder distribution | Helius RPC `getTokenLargestAccounts` | concentration / dump risk |
-| Funds / liquidity / momentum | DexScreener | is real money flowing in? |
-| Smart money / social | Helius (labeled wallets) + X/Twitter | narrative & smart-money interest |
-
-**LLM verdict** → `Signal { signal, confidence, bull_points[], bear_points[], red_flags[], rationale }`.
+1. **漏斗 = 成本控制。** Scanner 每轮产出数百个;HardFilter 砍到个位数;只有幸存者进入 Enricher + LLM。正是这一点让多 agent LLM 辩论在高频 meme 币流上**变得可行**。
+2. **数据与判断分离。** Enricher 只“取数”、ScoreEngine 只“算分”、LLMJudge 只“推理”。每一层可独立测试与替换。
+3. **provider 无关的 LLM。** 业务代码只依赖 `LLMProvider` 接口,绝不直接 import 任何厂商 SDK。按模型串前缀路由:
+   - `codex:<model>` → **CodexCLIProvider**(*本实验默认 —— 把 `codex exec` 当子进程,走 ChatGPT 订阅,零按量 API 成本*)
+   - `litellm:<provider>/<model>` → LiteLLM(Claude / OpenAI / DeepSeek)用于对比
+4. **降级,而非崩溃。** 任一数据源失败 → 该维度标记“缺失”(打分自动重新归一,并在 prompt 中告知 LLM)—— 流水线继续。若 LLM 本身不可达,LLMJudge 退化为基于规则的兜底信号。
 
 ---
 
-## 5. Tech stack
+## 4. 信号的具体构成
 
-- **Backend:** Python 3.11+ · `asyncio` + `httpx` (parallel data fetch)
-- **Models / contracts:** `pydantic` v2
-- **LLM:** provider-agnostic interface → **Codex CLI** (default) / LiteLLM (Claude·OpenAI·DeepSeek)
-- **Config:** `pydantic-settings` + `.env` + a YAML thresholds file (tune strategy without touching code)
-- **Storage:** SQLite (snapshots / signals / positions / funnel events)
-- **Dashboard:** Streamlit · **Alerts:** Telegram Bot API (optional)
+**硬红线**(任一不过即丢弃;所有阈值写在 [`config/thresholds.yaml`](src/memedog/config/thresholds.yaml),**严禁硬编码**):
+
+- **合约权限** —— mint 权限已放弃 · freeze 权限已放弃 · LP 已烧毁/锁定
+- **持币集中度** —— Top10(剔除 LP)≤ 35% · 单一钱包 < 20% · 开发者 < 10% · sniper 抢筹不畸高
+- **流动性 / 动量** —— 流动性 ≥ $20k · 5 分钟量过下限 · 买卖比 ≥ 1 · FDV/流动性比合理
+
+**四个打分维度**(加权到 0–100):
+
+| 维度 | 主数据源 | 信号含义 |
+|------|---------|---------|
+| 安全 / Rug | RugCheck(trustScore、riskLevel) | 能不能卖出?是不是蜜罐? |
+| 持币分布 | Helius RPC `getTokenLargestAccounts` | 集中度 / 砸盘风险 |
+| 资金 / 流动性 / 动量 | DexScreener | 是否有真实资金流入? |
+| 聪明钱 / 社交 | Helius(标注钱包)+ X/Twitter | 叙事热度与聪明钱兴趣 |
+
+**LLM 裁决** → `Signal { signal, confidence, bull_points[], bear_points[], red_flags[], rationale }`。
 
 ---
 
-## 6. Run it
+## 5. 技术栈
 
-### Prerequisites
-- Python 3.11+, Node 18+ (for Codex CLI)
-- (Optional) API keys — the system **degrades gracefully** without them. See [`.env.example`](.env.example).
+- **后端:** Python 3.11+ · `asyncio` + `httpx`(并行取数)
+- **模型 / 数据契约:** `pydantic` v2
+- **LLM:** provider 无关接口 → **Codex CLI**(默认)/ LiteLLM(Claude·OpenAI·DeepSeek)
+- **配置:** `pydantic-settings` + `.env` + YAML 阈值文件(调策略不改代码)
+- **存储:** SQLite(快照 / 信号 / 仓位 / 漏斗事件)
+- **看板:** Streamlit · **告警:** Telegram Bot API(可选)
 
-### Install
+---
+
+## 6. 如何运行
+
+### 前置
+- Python 3.11+、Node 18+(用于 Codex CLI)
+- (可选)各 API key —— 缺失时系统会**优雅降级**。见 [`.env.example`](.env.example)。
+
+### 安装
 ```bash
-pip install -e ".[dev]"          # or: pip install pydantic pydantic-settings httpx pyyaml litellm streamlit
-cp .env.example .env             # then fill in the keys you have
+pip install -e ".[dev]"          # 或: pip install pydantic pydantic-settings httpx pyyaml litellm streamlit
+cp .env.example .env             # 然后填入你拥有的 key
 ```
 
-### LLM backend (default = Codex CLI, uses your ChatGPT subscription — no API key)
+### LLM 后端(默认 = Codex CLI,走你的 ChatGPT 订阅,无需 API key)
 ```bash
 npm i -g @openai/codex
-codex login                      # one-time browser login with your ChatGPT account
+codex login                      # 一次性浏览器登录你的 ChatGPT 账户
 ```
-> To compare a standard API instead, set `llmjudge.models` in `thresholds.yaml` to e.g. `litellm:openai/gpt-4o` and put `OPENAI_API_KEY` in `.env`.
+> 若想改用标准 API 对比,把 `thresholds.yaml` 里的 `llmjudge.models` 改成如 `litellm:openai/gpt-4o`,并在 `.env` 填 `OPENAI_API_KEY`。
 
-### Keys & where they go (`.env` in project root)
-| Variable | Powers | Without it |
-|----------|--------|-----------|
-| `HELIUS_API_KEY` | holder distribution / smart money | that dimension degrades |
-| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Telegram alerts | alerts silently skipped |
-| `TWITTER_BEARER` | social heat | social dimension degrades |
-| Codex | LLM verdict | **no env key** — uses `codex login` |
-| DexScreener / RugCheck | scan + safety | no key needed (public) |
+### 各 key 放哪(项目根目录的 `.env`)
+| 变量 | 作用 | 缺失时 |
+|------|------|--------|
+| `HELIUS_API_KEY` | 持币分布 / 聪明钱 | 该维度降级 |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Telegram 告警 | 告警静默跳过 |
+| `TWITTER_BEARER` | 社交热度 | 社交维度降级 |
+| Codex | LLM 裁决 | **无需 env key** —— 用 `codex login` |
+| DexScreener / RugCheck | 扫描 + 安全 | 无需 key(公开) |
 
-### Launch
+### 启动
 ```bash
-python -m memedog                       # run the pipeline (scan → … → paper trade)
-python scripts/seed_demo.py             # seed sample data for the dashboard demo
-streamlit run dashboard/app.py          # live dashboard (signals, funnel, PnL)
+python -m memedog                       # 跑流水线(扫描 → … → 模拟交易)
+python scripts/seed_demo.py             # 灌入示例数据用于看板演示
+streamlit run dashboard/app.py          # 实时看板(信号、漏斗、盈亏)
 ```
 
 ---
 
-## 7. Tested for real (not just mocks)
+## 7. 真实测试(不是只有 mock)
 
-Testing is **real-data-driven**, in two tiers:
+测试采用**真实数据驱动**,分两层:
 
-- **Default suite — `pytest` → 446 tests, fully offline & deterministic.** Every external-API test is driven by **real captured API response bodies** (in [`tests/fixtures/`](tests/fixtures/), refreshable via [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py); secrets/PII never stored). Verified to make **zero external network calls**.
-- **Live tier — `pytest -m live` → 9 tests** that hit the real DexScreener / RugCheck / Helius / Codex / Telegram and run a full end-to-end cycle. Each self-skips without its key/binary; Telegram is double-gated (`MEMEDOG_LIVE_TELEGRAM=1`) to avoid accidental sends.
+- **默认套件 —— `pytest` → 446 个测试,完全离线、确定性。** 每个外部 API 测试都由**真实抓取的 API 响应体**驱动(存于 [`tests/fixtures/`](tests/fixtures/),可用 [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py) 刷新;密钥/PII 绝不入库)。已验证**零外部联网**。
+- **live 层 —— `pytest -m live` → 9 个测试**,真实命中 DexScreener / RugCheck / Helius / Codex / Telegram,并跑一次完整端到端 cycle。缺对应 key/二进制时各自自动 skip;Telegram 双重闸门(`MEMEDOG_LIVE_TELEGRAM=1`)防止误发。
 
-All five external integrations + a full real `run_cycle` have been executed live and confirmed working.
+五个外部集成 + 一次完整的真实 `run_cycle` 均已真实跑通并确认可用。
 
 ---
 
-## 8. Project structure
+## 8. 项目结构
 
 ```
 src/memedog/
-├── orchestrator.py        # wires stages 1→6 into the funnel cycle
-├── models/                # typed data contracts (TokenCandidate → Signal → TradeRecord)
-├── clients/               # one wrapper per API (dexscreener, rugcheck, helius, twitter) + retry base
+├── orchestrator.py        # 把 1→6 各段串成漏斗 cycle
+├── models/                # 带类型的数据契约(TokenCandidate → Signal → TradeRecord)
+├── clients/               # 每个 API 一个封装(dexscreener, rugcheck, helius, twitter)+ 带重试的基类
 ├── scanner/  hardfilter/  enricher/  scoring/  llmjudge/  papertrader/
-├── llm/                   # provider-agnostic LLM layer (codex / litellm) + structured output
+├── llm/                   # provider 无关的 LLM 层(codex / litellm)+ 结构化输出
 ├── alert/                 # Telegram
 ├── config/                # settings.py + thresholds.yaml
-└── store.py               # SQLite persistence
-dashboard/app.py           # Streamlit board
-plan/                      # per-module design docs (00 architecture … 08 data contracts)
-docs/superpowers/          # spec + implementation plans
-tests/  +  tests/live/     # real-fixture suite + opt-in live tier
+└── store.py               # SQLite 持久化
+dashboard/app.py           # Streamlit 看板
+plan/                      # 各模块设计文档(00 架构 … 08 数据契约)
+docs/superpowers/          # spec + 实现计划
+tests/  +  tests/live/     # 真实 fixture 套件 + 可选 live 层
 ```
 
-Per-module design rationale lives in [`plan/`](plan/) — start with [`plan/00-architecture.md`](plan/00-architecture.md).
+各模块的设计理由见 [`plan/`](plan/) —— 建议从 [`plan/00-architecture.md`](plan/00-architecture.md) 看起。
 
 ---
 
-## 9. Scope & limitations (honest)
+## 9. 范围与局限(诚实说明)
 
-- **Simulated trading only** — no wallet, no orders. PnL is virtual (ignores slippage/fees by default).
-- **Solana-first.** New tokens are usually highly concentrated / no social, so genuine `BULLISH` verdicts are (correctly) rare.
-- **Twitter** needs a paid X API tier; without it the social dimension simply degrades.
-- **LLM latency** ~50–80 s per verdict (3 calls); acceptable because the funnel only sends a handful of candidates per cycle.
+- **仅模拟交易** —— 无钱包、无下单。盈亏为虚拟(默认忽略滑点/手续费)。
+- **Solana 优先。** 新币通常高度集中 / 无社交,因此真正的 `BULLISH` 裁决(理应)很少。
+- **Twitter** 需付费 X API 档位;没有时社交维度直接降级。
+- **LLM 延迟** 每次裁决约 50–80 秒(3 次调用);可接受,因为漏斗每轮只送极少数候选进来。
 
 ---
 
-*Built for the Bitget AI Hackathon. Research & demonstration use only — not investment advice.*
+*为 Bitget AI Hackathon 而构建。仅供研究与演示,非投资建议。*
