@@ -73,35 +73,108 @@ class TestRetryBehavior:
 
 
 class TestExponentialBackoff:
-    async def test_sleep_called_with_exponential_delays(self):
-        """On a 3-attempt run with backoff_base=0.01 the delays must be 0.01 then 0.02.
-
-        The implementation sleeps *before* each retry (not after the last
-        attempt), so for max_retries=3 there are exactly 2 sleep calls:
-          attempt 0 → sleep(0.01 * 2**0) = sleep(0.01)
-          attempt 1 → sleep(0.01 * 2**1) = sleep(0.02)
-          attempt 2 → last attempt, no sleep
-        """
+    async def test_sleep_uses_jittered_exponential_upper_bound(self):
+        """With random.uniform patched to return its upper bound, the delays are
+        backoff_base*2**attempt: 0.01 then 0.02 (2 sleeps for max_retries=3)."""
         from memedog.clients.base import BaseHTTPClient, DataSourceError
 
         with respx.mock:
             respx.get("https://api.example.com/slow").mock(
                 return_value=httpx.Response(500, json={"error": "always fails"})
             )
-            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-                async with BaseHTTPClient(
-                    base_url="https://api.example.com",
-                    max_retries=3,
-                    backoff_base=0.01,
-                ) as client:
-                    with pytest.raises(DataSourceError):
-                        await client.get_json("/slow")
+            with patch("memedog.clients.base.random.uniform", side_effect=lambda lo, hi: hi):
+                with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                    async with BaseHTTPClient(
+                        base_url="https://api.example.com",
+                        max_retries=3,
+                        backoff_base=0.01,
+                    ) as client:
+                        with pytest.raises(DataSourceError):
+                            await client.get_json("/slow")
 
-        # Must have slept exactly twice with exponential delays
         assert mock_sleep.call_count == 2
         delays = [call.args[0] for call in mock_sleep.call_args_list]
         assert delays[0] == pytest.approx(0.01)
         assert delays[1] == pytest.approx(0.02)
+
+
+class TestSmartRetry:
+    async def test_404_not_retried(self):
+        from memedog.clients.base import BaseHTTPClient, DataSourceError
+
+        with respx.mock:
+            route = respx.get("https://api.example.com/missing").mock(
+                return_value=httpx.Response(404, json={"error": "nope"})
+            )
+            async with BaseHTTPClient(base_url="https://api.example.com", backoff_base=0) as client:
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    with pytest.raises(DataSourceError):
+                        await client.get_json("/missing")
+            assert route.call_count == 1  # no retry on 4xx
+
+    async def test_429_retried(self):
+        from memedog.clients.base import BaseHTTPClient
+
+        with respx.mock:
+            route = respx.get("https://api.example.com/limited")
+            route.side_effect = [
+                httpx.Response(429, json={"error": "slow down"}),
+                httpx.Response(200, json={"ok": True}),
+            ]
+            async with BaseHTTPClient(base_url="https://api.example.com", backoff_base=0) as client:
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await client.get_json("/limited")
+        assert result == {"ok": True}
+
+    async def test_429_honors_retry_after(self):
+        from memedog.clients.base import BaseHTTPClient
+
+        with respx.mock:
+            route = respx.get("https://api.example.com/ra")
+            route.side_effect = [
+                httpx.Response(429, headers={"Retry-After": "2"}, json={}),
+                httpx.Response(200, json={"ok": True}),
+            ]
+            async with BaseHTTPClient(base_url="https://api.example.com", backoff_base=0.01) as client:
+                with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                    await client.get_json("/ra")
+        # the wait must equal Retry-After (2s), not the jitter backoff
+        assert any(call.args and call.args[0] == 2 for call in mock_sleep.call_args_list)
+
+    async def test_retry_after_capped_at_max_backoff(self):
+        from memedog.clients.base import BaseHTTPClient
+
+        with respx.mock:
+            route = respx.get("https://api.example.com/big")
+            route.side_effect = [
+                httpx.Response(503, headers={"Retry-After": "999"}, json={}),
+                httpx.Response(200, json={"ok": True}),
+            ]
+            async with BaseHTTPClient(
+                base_url="https://api.example.com", backoff_base=0.01, max_backoff=5
+            ) as client:
+                with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                    await client.get_json("/big")
+        assert any(call.args and call.args[0] == 5 for call in mock_sleep.call_args_list)
+
+    async def test_backoff_uses_jitter(self):
+        """With jitter, delay = random.uniform(0, base*2**attempt). Patch random."""
+        from memedog.clients.base import BaseHTTPClient, DataSourceError
+
+        with respx.mock:
+            respx.get("https://api.example.com/jit").mock(
+                return_value=httpx.Response(500, json={})
+            )
+            with patch("memedog.clients.base.random.uniform", return_value=0.123) as mock_rand:
+                with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                    async with BaseHTTPClient(
+                        base_url="https://api.example.com", max_retries=3, backoff_base=0.01
+                    ) as client:
+                        with pytest.raises(DataSourceError):
+                            await client.get_json("/jit")
+        assert mock_rand.called
+        # every jittered sleep is the patched value
+        assert all(call.args[0] == 0.123 for call in mock_sleep.call_args_list)
 
 
 class TestPostJson:
