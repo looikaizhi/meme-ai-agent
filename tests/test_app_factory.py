@@ -179,3 +179,20 @@ def test_main_imports_without_side_effects():
     assert hasattr(mod, "main")
     import asyncio
     assert asyncio.iscoroutinefunction(mod.main)
+
+
+# ---------------------------------------------------------------------------
+# Test: http policy + rate limiter wiring (sub-project B)
+# ---------------------------------------------------------------------------
+
+
+def test_clients_get_rate_limiter_and_policy(cfg, store):
+    from memedog.app_factory import build_orchestrator
+    from memedog.clients.ratelimit import AsyncRateLimiter
+
+    orch = build_orchestrator(cfg, store)
+    # scanner's client is the dexscreener client
+    scanner_client = orch._scanner._client
+    assert isinstance(scanner_client._rate_limiter, AsyncRateLimiter)
+    # dexscreener override leaves timeout at default → matches policy_for
+    assert scanner_client._timeout == cfg.http.policy_for("dexscreener").timeout_sec

@@ -15,6 +15,7 @@ from typing import Optional
 
 from memedog.clients.dexscreener import DexScreenerClient
 from memedog.clients.helius import HeliusClient
+from memedog.clients.ratelimit import AsyncRateLimiter
 from memedog.clients.rugcheck import RugCheckClient
 from memedog.clients.twitter import TwitterClient
 from memedog.config.settings import Config
@@ -49,17 +50,28 @@ def build_orchestrator(cfg: Config, store: Store) -> Orchestrator:
         Ready to run, with all collaborators wired.
     """
     # -----------------------------------------------------------------------
-    # Data clients
+    # Data clients (each gets a per-source retry + rate-limit policy)
     # -----------------------------------------------------------------------
-    dex_client = DexScreenerClient()
+    def _http_kwargs(source: str) -> dict:
+        pol = cfg.http.policy_for(source)
+        return dict(
+            timeout=pol.timeout_sec,
+            max_retries=pol.max_retries,
+            backoff_base=pol.backoff_base_sec,
+            max_backoff=pol.max_backoff_sec,
+            retry_status_codes=pol.retry_status_codes,
+            rate_limiter=AsyncRateLimiter(pol.max_concurrency, pol.min_interval_sec),
+        )
 
-    rugcheck_client = RugCheckClient()
+    dex_client = DexScreenerClient(**_http_kwargs("dexscreener"))
+
+    rugcheck_client = RugCheckClient(**_http_kwargs("rugcheck"))
 
     helius_api_key: str = cfg.settings.helius_api_key or ""
-    helius_client = HeliusClient(api_key=helius_api_key)
+    helius_client = HeliusClient(api_key=helius_api_key, **_http_kwargs("helius"))
 
     twitter_bearer: Optional[str] = cfg.settings.twitter_bearer
-    twitter_client = TwitterClient(bearer_token=twitter_bearer)
+    twitter_client = TwitterClient(bearer_token=twitter_bearer, **_http_kwargs("twitter"))
 
     # -----------------------------------------------------------------------
     # Pipeline modules
