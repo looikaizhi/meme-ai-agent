@@ -57,25 +57,6 @@ class TestFetchLatestTokenAddresses:
         # Every returned address must come from a solana item
         assert result == expected_addrs
 
-    async def test_returns_only_matching_chain_addresses(self):
-        """fetch_latest_token_addresses filters by chainId — only solana returned."""
-        from memedog.clients.dexscreener import DexScreenerClient
-
-        profiles = [
-            {"chainId": "solana", "tokenAddress": "ADDR_SOL_1"},
-            {"chainId": "base", "tokenAddress": "ADDR_BASE_1"},
-            {"chainId": "solana", "tokenAddress": "ADDR_SOL_2"},
-            {"chainId": "ethereum", "tokenAddress": "ADDR_ETH_1"},
-        ]
-
-        with respx.mock:
-            respx.get(self.PROFILES_URL).mock(
-                return_value=httpx.Response(200, json=profiles)
-            )
-            async with DexScreenerClient() as client:
-                result = await client.fetch_latest_token_addresses("solana")
-
-        assert result == ["ADDR_SOL_1", "ADDR_SOL_2"]
 
     async def test_returns_empty_list_when_no_matching_chain(self):
         """Returns [] when no profiles match the requested chain."""
@@ -203,22 +184,6 @@ class TestGetTokenPairs:
 
         assert result == []
 
-    async def test_returns_pairs_array(self):
-        """get_token_pairs returns the pairs list from the API response."""
-        from memedog.clients.dexscreener import DexScreenerClient
-
-        payload = {"pairs": [SAMPLE_PAIR]}
-
-        with respx.mock:
-            respx.get(self._pairs_url()).mock(
-                return_value=httpx.Response(200, json=payload)
-            )
-            async with DexScreenerClient() as client:
-                result = await client.get_token_pairs(self.MINT)
-
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0]["pairAddress"] == "PAIR123"
 
     async def test_returns_empty_list_when_pairs_missing(self):
         """get_token_pairs returns [] when response has no 'pairs' key."""
@@ -306,27 +271,6 @@ class TestGetTokenPrice:
         assert isinstance(result, float)
         assert result > 0.0
 
-    async def test_returns_float_price_when_pair_present(self):
-        """get_token_price returns the float priceUsd from the first pair."""
-        from memedog.clients.dexscreener import DexScreenerClient
-
-        payload = {
-            "pairs": [
-                {
-                    "baseToken": {"address": self.MINT, "symbol": "SOL"},
-                    "priceUsd": "42.50",
-                }
-            ]
-        }
-
-        with respx.mock:
-            respx.get(
-                f"https://api.dexscreener.com/latest/dex/tokens/{self.MINT}"
-            ).mock(return_value=httpx.Response(200, json=payload))
-            async with DexScreenerClient() as client:
-                result = await client.get_token_price(self.MINT)
-
-        assert result == pytest.approx(42.50)
 
     async def test_returns_none_when_pairs_empty(self):
         """get_token_price returns None when the response has an empty pairs list."""

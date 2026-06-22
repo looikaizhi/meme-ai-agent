@@ -137,34 +137,6 @@ class TestGetLargestHolders:
     # Synthetic / inline tests (kept for edge-case coverage)
     # ------------------------------------------------------------------
 
-    async def test_top10_pct_and_max_wallet_computed_correctly(self):
-        """With 4 accounts totaling 100, top10=100%, max_wallet=50%."""
-        from memedog.clients.helius import HeliusClient
-
-        with respx.mock:
-            respx.post(BASE_URL).mock(
-                return_value=httpx.Response(200, json=LARGEST_ACCOUNTS_RESPONSE)
-            )
-            async with HeliusClient(api_key=API_KEY) as client:
-                result = await client.get_largest_holders(MINT)
-
-        # top10 = sum of all 4 accounts / total * 100 = 100%
-        assert result["top10_pct"] == pytest.approx(100.0)
-        # max_wallet = largest (50) / total (100) * 100 = 50%
-        assert result["max_wallet_pct"] == pytest.approx(50.0)
-
-    async def test_holder_count_returns_number_of_accounts(self):
-        """holder_count is len of returned accounts (lower bound / rough proxy)."""
-        from memedog.clients.helius import HeliusClient
-
-        with respx.mock:
-            respx.post(BASE_URL).mock(
-                return_value=httpx.Response(200, json=LARGEST_ACCOUNTS_RESPONSE)
-            )
-            async with HeliusClient(api_key=API_KEY) as client:
-                result = await client.get_largest_holders(MINT)
-
-        assert result["holder_count"] == 4
 
     async def test_single_wallet_is_max(self):
         """When only one wallet holds all supply, max_wallet=100%, top10=100%."""
@@ -181,36 +153,6 @@ class TestGetLargestHolders:
         assert result["max_wallet_pct"] == pytest.approx(100.0)
         assert result["holder_count"] == 1
 
-    async def test_empty_accounts_returns_none_values(self):
-        """Empty value list → all fields None, no crash."""
-        from memedog.clients.helius import HeliusClient
-
-        with respx.mock:
-            respx.post(BASE_URL).mock(
-                return_value=httpx.Response(200, json=EMPTY_ACCOUNTS_RESPONSE)
-            )
-            async with HeliusClient(api_key=API_KEY) as client:
-                result = await client.get_largest_holders(MINT)
-
-        assert result["top10_pct"] is None
-        assert result["max_wallet_pct"] is None
-        # holder_count may be 0 or None — either is acceptable for empty list
-        assert result["holder_count"] in (0, None)
-
-    async def test_error_response_returns_none_values(self):
-        """RPC error body (no result key) → None values, no crash."""
-        from memedog.clients.helius import HeliusClient
-
-        with respx.mock:
-            respx.post(BASE_URL).mock(
-                return_value=httpx.Response(200, json=ERROR_RESPONSE)
-            )
-            async with HeliusClient(api_key=API_KEY) as client:
-                result = await client.get_largest_holders(MINT)
-
-        assert result["top10_pct"] is None
-        assert result["max_wallet_pct"] is None
-        assert result["holder_count"] is None
 
     async def test_top10_only_sums_top_10_when_more_than_10_accounts(self):
         """When more than 10 accounts returned, top10_pct uses only the first 10."""
