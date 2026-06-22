@@ -97,6 +97,19 @@ CREATE TABLE IF NOT EXISTS funnel_events (
 );
 """
 
+_CREATE_PIPELINE_EVENTS = """
+CREATE TABLE IF NOT EXISTS pipeline_events (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts        TEXT NOT NULL,
+    trace_id  TEXT NOT NULL DEFAULT '',
+    stage     TEXT NOT NULL,
+    mint      TEXT NOT NULL DEFAULT '',
+    symbol    TEXT NOT NULL DEFAULT '',
+    status    TEXT NOT NULL DEFAULT '',
+    detail    TEXT NOT NULL DEFAULT ''
+);
+"""
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -139,6 +152,7 @@ class Store:
         cur.execute(_CREATE_SIGNALS)
         cur.execute(_CREATE_SNAPSHOTS)
         cur.execute(_CREATE_FUNNEL_EVENTS)
+        cur.execute(_CREATE_PIPELINE_EVENTS)
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -416,6 +430,55 @@ class Store:
                     "dropped": [tuple(item) for item in json.loads(row["dropped"])],
                     "flagged": [tuple(item) for item in json.loads(row["flagged"])],
                     "ts": _str_to_dt(row["ts"]),
+                }
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # Pipeline events (real-time activity stream)
+    # ------------------------------------------------------------------
+
+    def save_event(
+        self,
+        stage: str,
+        *,
+        trace_id: str = "",
+        mint: str = "",
+        symbol: str = "",
+        status: str = "",
+        detail: str = "",
+        ts: "datetime | None" = None,
+    ) -> None:
+        """Append one pipeline event row (real-time activity stream)."""
+        if ts is None:
+            ts = datetime.now(tz=timezone.utc)
+        self._conn.execute(
+            """
+            INSERT INTO pipeline_events
+              (ts, trace_id, stage, mint, symbol, status, detail)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (_dt_to_str(ts), trace_id, stage, mint, symbol, status, detail),
+        )
+        self._conn.commit()
+
+    def recent_events(self, limit: int = 50) -> list[dict]:
+        """Return the most recent N pipeline events, newest first."""
+        cur = self._conn.execute(
+            "SELECT * FROM pipeline_events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        result = []
+        for row in cur.fetchall():
+            result.append(
+                {
+                    "ts": _str_to_dt(row["ts"]),
+                    "trace_id": row["trace_id"],
+                    "stage": row["stage"],
+                    "mint": row["mint"],
+                    "symbol": row["symbol"],
+                    "status": row["status"],
+                    "detail": row["detail"],
                 }
             )
         return result
