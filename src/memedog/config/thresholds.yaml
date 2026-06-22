@@ -1,4 +1,6 @@
 scanner:
+  source: bitget_mcp
+  bitget_mcp_url: https://datahub.noxiaohao.com/mcp
   scan_interval_sec: 30
   chain: solana
   min_pair_age_min: 20

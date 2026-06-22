@@ -21,6 +21,7 @@ from memedog.models import (
     TokenSnapshot,
     TradeRecord,
 )
+from memedog.backtest import BacktestReport
 from memedog.models.candidate import TokenCandidate
 from memedog.models.snapshot import (
     HolderInfo,
@@ -110,6 +111,23 @@ def _make_signal(
         rationale="looking good",
         created_at=_utcnow(),
         trace_id="trace-001",
+    )
+
+
+def _make_backtest_report() -> BacktestReport:
+    trade = _make_trade(mint="MINT_BT", symbol="BTDOGE", pnl_usd=25.0, pnl_pct=0.25)
+    return BacktestReport(
+        signals_seen=3,
+        trades_opened=1,
+        skipped_no_price=1,
+        total_pnl_usd=25.0,
+        avg_pnl_pct=0.25,
+        win_rate=1.0,
+        profit_factor=None,
+        max_drawdown_usd=0.0,
+        best_trade_pct=0.25,
+        worst_trade_pct=0.25,
+        trades=[trade],
     )
 
 
@@ -446,3 +464,34 @@ def test_funnel_event_empty_lists(store: Store) -> None:
     events = store.recent_funnel_events()
     assert events[0]["dropped"] == []
     assert events[0]["flagged"] == []
+
+
+# ---------------------------------------------------------------------------
+# Test: backtest_reports round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_save_and_recent_backtest_reports_roundtrip(store: Store) -> None:
+    """Backtest reports persist as JSON payloads for the dashboard."""
+    created_at = datetime(2026, 6, 23, 9, 0, 0, tzinfo=timezone.utc)
+    report = _make_backtest_report()
+
+    store.save_backtest_report("demo backtest", report, created_at=created_at)
+
+    reports = store.recent_backtest_reports()
+    assert len(reports) == 1
+    row = reports[0]
+    assert row["name"] == "demo backtest"
+    assert row["created_at"] == created_at
+    assert row["report"].signals_seen == 3
+    assert row["report"].trades[0].mint == "MINT_BT"
+
+
+def test_recent_backtest_reports_respects_limit(store: Store) -> None:
+    """recent_backtest_reports(limit=N) returns at most N reports."""
+    for i in range(5):
+        report = _make_backtest_report()
+        store.save_backtest_report(f"report-{i}", report)
+
+    reports = store.recent_backtest_reports(limit=2)
+    assert len(reports) == 2

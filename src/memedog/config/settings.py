@@ -24,8 +24,10 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class ScannerConfig(BaseModel):
+    source: Literal["bitget_mcp", "dexscreener"] = "bitget_mcp"
     scan_interval_sec: int
     chain: str
+    bitget_mcp_url: str = "https://datahub.noxiaohao.com/mcp"
     min_pair_age_min: int
     max_pair_age_min: int
     prefilter_min_liquidity_usd: float

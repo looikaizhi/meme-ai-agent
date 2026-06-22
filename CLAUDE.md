@@ -25,12 +25,13 @@
 ## 流水线与模块边界
 
 ```
-[1] Scanner      → 轮询 DexScreener,筛"初有动量"候选        → 产出 TokenCandidate
+[1] Scanner      → 轮询 Bitget market-data MCP,筛"初有动量"候选 → 产出 TokenCandidate
 [2] HardFilter   → 三类红线(合约权限/持币集中度/资金动量)    → 过滤候选
 [3] Enricher     → 并行抓 4 维信号,组装 TokenSnapshot         → 产出 TokenSnapshot
 [4] ScoreEngine  → 4 维加权打分 0~100                          → 产出 Score
 [5] LLMJudge     → Bull/Bear 双视角 + 裁决                      → 产出 Signal
-[6] PaperTrader  → 开虚拟仓 / 轮询价格 / 止盈止损超时平仓        → 产出 Position / PnL
+[6a] Backtester  → 历史价回放 / 验证胜率PNL回撤 / Playbook导出 → 产出 BacktestReport
+[6b] PaperTrader → 开虚拟仓 / 轮询价格 / 止盈止损超时平仓        → 产出 Position / PnL
      │
      └─→ Dashboard(轻前端看板) + Alert(可选 Telegram)
 ```
@@ -43,7 +44,7 @@
 |------|---------|------|
 | 安全 / Rug | RugCheck API(trustScore 0~100、riskLevel) | GoPlus Security API |
 | 持币分布 / 集中度 | Helius RPC / Solana RPC `getTokenLargestAccounts` | Birdeye |
-| 资金 / 流动性 / 动量 | DexScreener API(免费:量/流动性/买卖笔数/FDV) | Birdeye |
+| 资金 / 流动性 / 动量 | Bitget market-data MCP `dex_market`(默认) | DexScreener / Birdeye |
 | 聪明钱 / 社交热度 | Helius(标注钱包) + X/Twitter 搜索 | LunarCrush |
 
 ## 硬规则红线(默认值,可在 config 调整)
@@ -66,6 +67,7 @@
 - **配置**:`pydantic-settings` + `.env` + YAML 阈值文件
 - **前端看板**:Streamlit(hackathon 优先,出图快;后续可替换为 React)
 - **告警(可选)**:Telegram Bot API
+- **回测**:`src/memedog/backtest/` 内部回放 MemeDog 信号;`build_playbook_prompt` 导出 Bitget Playbook 策略 prompt
 
 ## 目录结构(规划)
 
@@ -88,6 +90,7 @@
 │   ├── enricher/
 │   ├── scoring/
 │   ├── llmjudge/
+│   ├── backtest/
 │   ├── papertrader/
 │   ├── models/                # 结构化数据对象(数据契约)
 │   ├── clients/               # 各数据源 API 封装

@@ -21,6 +21,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
+from memedog.backtest import BacktestReport
 from memedog.models import Position, Signal, SignalType, TokenSnapshot, TradeRecord
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,15 @@ CREATE TABLE IF NOT EXISTS funnel_events (
 );
 """
 
+_CREATE_BACKTEST_REPORTS = """
+CREATE TABLE IF NOT EXISTS backtest_reports (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    payload    TEXT NOT NULL
+);
+"""
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -139,6 +149,7 @@ class Store:
         cur.execute(_CREATE_SIGNALS)
         cur.execute(_CREATE_SNAPSHOTS)
         cur.execute(_CREATE_FUNNEL_EVENTS)
+        cur.execute(_CREATE_BACKTEST_REPORTS)
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -419,6 +430,49 @@ class Store:
                 }
             )
         return result
+
+    # ------------------------------------------------------------------
+    # Backtest reports
+    # ------------------------------------------------------------------
+
+    def save_backtest_report(
+        self,
+        name: str,
+        report: BacktestReport,
+        created_at: datetime | None = None,
+    ) -> None:
+        """Persist a backtest report for dashboard review."""
+        if created_at is None:
+            created_at = datetime.now(tz=timezone.utc)
+        self._conn.execute(
+            """
+            INSERT INTO backtest_reports (name, created_at, payload)
+            VALUES (?, ?, ?)
+            """,
+            (name, _dt_to_str(created_at), report.model_dump_json()),
+        )
+        self._conn.commit()
+
+    def recent_backtest_reports(self, limit: int = 10) -> list[dict]:
+        """Return recent backtest reports, newest first."""
+        cur = self._conn.execute(
+            "SELECT * FROM backtest_reports ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        rows = cur.fetchall()
+        reports = []
+        for row in rows:
+            try:
+                reports.append(
+                    {
+                        "name": row["name"],
+                        "created_at": _str_to_dt(row["created_at"]),
+                        "report": BacktestReport.model_validate_json(row["payload"]),
+                    }
+                )
+            except Exception as exc:
+                logger.warning("skipping corrupt backtest report payload: %s", exc)
+        return reports
 
     # ------------------------------------------------------------------
     # Lifecycle

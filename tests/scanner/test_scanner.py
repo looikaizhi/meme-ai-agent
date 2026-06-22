@@ -47,6 +47,8 @@ def make_scanner_config(**overrides) -> ScannerConfig:
 def make_raw_pair(
     address: str = "MINT_AAA",
     symbol: str = "AAA",
+    quote_address: str = "So11111111111111111111111111111111111111112",
+    quote_symbol: str = "SOL",
     pair_address: str = "PAIR_AAA",
     chain_id: str = "solana",
     liquidity_usd: float = 25_000.0,
@@ -65,6 +67,7 @@ def make_raw_pair(
     return {
         "chainId": chain_id,
         "baseToken": {"address": address, "symbol": symbol},
+        "quoteToken": {"address": quote_address, "symbol": quote_symbol},
         "pairAddress": pair_address,
         "priceUsd": price_usd,
         "liquidity": {"usd": liquidity_usd},
@@ -258,6 +261,60 @@ class TestRepresentativePairSelection:
         assert len(results) == 1
         assert results[0].pair_address == "PAIR_HIGH"
         assert results[0].liquidity_usd == pytest.approx(50_000.0)
+
+    async def test_uses_requested_mint_when_token_is_quote_side(self):
+        """If the discovered mint is quoteToken, candidate identity must still be that mint."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        pair = make_raw_pair(
+            address="BASE_TOKEN",
+            symbol="BASE",
+            quote_address="TARGET_MINT",
+            quote_symbol="DOGE",
+            pair_address="PAIR_TARGET_QUOTE",
+            liquidity_usd=50_000.0,
+            volume_m5=800.0,
+            age_min=20,
+        )
+        client = make_fake_client(
+            addresses=["TARGET_MINT"],
+            pairs_by_mint={"TARGET_MINT": [pair]},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert results[0].mint == "TARGET_MINT"
+        assert results[0].symbol == "DOGE"
+        assert results[0].pair_address == "PAIR_TARGET_QUOTE"
+
+    async def test_same_symbol_different_mints_are_separate_candidates(self):
+        """Same ticker cannot collapse different meme coins because mint is canonical."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        pair_a = make_raw_pair(
+            address="MINT_ALPHA",
+            symbol="DOGE",
+            pair_address="PAIR_ALPHA",
+        )
+        pair_b = make_raw_pair(
+            address="MINT_BETA",
+            symbol="DOGE",
+            pair_address="PAIR_BETA",
+        )
+        client = make_fake_client(
+            addresses=["MINT_ALPHA", "MINT_BETA"],
+            pairs_by_mint={"MINT_ALPHA": [pair_a], "MINT_BETA": [pair_b]},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert [candidate.mint for candidate in results] == ["MINT_ALPHA", "MINT_BETA"]
+        assert [candidate.symbol for candidate in results] == ["DOGE", "DOGE"]
 
     async def test_skips_token_when_all_pairs_are_wrong_chain(self):
         """A token whose pairs are all on base-chain (not solana) is skipped."""

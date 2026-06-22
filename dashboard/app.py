@@ -97,12 +97,8 @@ def main() -> None:
                     color = "orange"
                     icon = "🟡"
 
-                red_flags_str = ", ".join(sig.red_flags) if sig.red_flags else "none"
-                bull_str = "; ".join(sig.bull_points[:2]) if sig.bull_points else "—"
-                bear_str = "; ".join(sig.bear_points[:2]) if sig.bear_points else "—"
-
                 with st.container():
-                    cols = st.columns([1, 2, 1, 1, 2])
+                    cols = st.columns([1, 1, 1, 1, 2])
                     cols[0].markdown(f"**{icon} {sig.symbol}**")
                     cols[1].markdown(
                         f"<span style='color:{color}'>{sig.signal.value}</span>",
@@ -110,9 +106,37 @@ def main() -> None:
                     )
                     cols[2].markdown(f"Conf: **{sig.confidence:.0%}**")
                     cols[3].markdown(f"Score: **{sig.score_total:.1f}**")
-                    cols[4].markdown(
-                        f"Bull: {bull_str} | Bear: {bear_str} | Flags: {red_flags_str}"
-                    )
+                    cols[4].markdown(f"`{sig.mint[:12]}...`")
+
+                    with st.expander("Review debate and judge verdict"):
+                        bull_tab, bear_tab, judge_tab = st.tabs(
+                            ["Bull Case", "Bear Case", "Judge Verdict"]
+                        )
+                        with bull_tab:
+                            if sig.bull_points:
+                                for point in sig.bull_points:
+                                    st.markdown(f"- {point}")
+                            else:
+                                st.info("No bull-case points recorded.")
+                        with bear_tab:
+                            if sig.bear_points:
+                                for point in sig.bear_points:
+                                    st.markdown(f"- {point}")
+                            else:
+                                st.info("No bear-case points recorded.")
+                        with judge_tab:
+                            verdict_cols = st.columns(3)
+                            verdict_cols[0].metric("Verdict", sig.signal.value)
+                            verdict_cols[1].metric("Confidence", f"{sig.confidence:.0%}")
+                            verdict_cols[2].metric("Score", f"{sig.score_total:.1f}")
+                            st.markdown("**Rationale**")
+                            st.write(sig.rationale)
+                            if sig.red_flags:
+                                st.markdown("**Red Flags**")
+                                for flag in sig.red_flags:
+                                    st.markdown(f"- {flag}")
+                            else:
+                                st.caption("No red flags recorded.")
                 st.divider()
 
         # ------------------------------------------------------------------
@@ -177,9 +201,70 @@ def main() -> None:
             st.info("No closed trades yet.")
 
         # ------------------------------------------------------------------
-        # Section 3: Candidate funnel (driven by store.recent_funnel_events)
+        # Section 3: Backtesting
         # ------------------------------------------------------------------
-        st.header("3. Candidate Funnel")
+        st.header("3. Backtesting")
+
+        backtest_reports = store.recent_backtest_reports(limit=5)
+        if not backtest_reports:
+            st.info("No backtest reports recorded yet. Run a backtest or seed demo data.")
+        else:
+            latest = backtest_reports[0]
+            report = latest["report"]
+            st.caption(
+                f"{latest['name']} | "
+                f"{latest['created_at'].strftime('%Y-%m-%d %H:%M:%S UTC')}"
+            )
+            metric_cols = st.columns(6)
+            metric_cols[0].metric("Signals Seen", str(report.signals_seen))
+            metric_cols[1].metric("Trades", str(report.trades_opened))
+            metric_cols[2].metric("Win Rate", f"{report.win_rate:.1%}")
+            metric_cols[3].metric("Total PnL", f"${report.total_pnl_usd:+,.2f}")
+            metric_cols[4].metric("Avg PnL", f"{report.avg_pnl_pct * 100:+.1f}%")
+            profit_factor = (
+                "n/a" if report.profit_factor is None else f"{report.profit_factor:.2f}"
+            )
+            metric_cols[5].metric("Profit Factor", profit_factor)
+            st.metric("Max Drawdown", f"${report.max_drawdown_usd:,.2f}")
+
+            if report.trades:
+                rows = [
+                    {
+                        "Symbol": t.symbol,
+                        "Mint": t.mint[:12] + "...",
+                        "Entry": f"${t.entry_price:.8f}",
+                        "Exit": f"${t.exit_price:.8f}",
+                        "PnL USD": f"${t.pnl_usd:+.2f}",
+                        "PnL %": f"{t.pnl_pct * 100:+.1f}%",
+                        "Reason": t.exit_reason,
+                        "Entry Time": t.entry_time.strftime("%Y-%m-%d %H:%M"),
+                        "Exit Time": t.exit_time.strftime("%Y-%m-%d %H:%M"),
+                    }
+                    for t in report.trades
+                ]
+                st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            else:
+                st.info("Latest backtest did not open any trades.")
+
+            if len(backtest_reports) > 1:
+                st.subheader("Recent Backtest Runs")
+                rows = [
+                    {
+                        "Name": item["name"],
+                        "Created": item["created_at"].strftime("%Y-%m-%d %H:%M"),
+                        "Signals": item["report"].signals_seen,
+                        "Trades": item["report"].trades_opened,
+                        "Win Rate": f"{item['report'].win_rate:.1%}",
+                        "PnL USD": f"${item['report'].total_pnl_usd:+.2f}",
+                    }
+                    for item in backtest_reports
+                ]
+                st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+        # ------------------------------------------------------------------
+        # Section 4: Candidate funnel (driven by store.recent_funnel_events)
+        # ------------------------------------------------------------------
+        st.header("4. Candidate Funnel")
 
         funnel_events = store.recent_funnel_events(limit=20)
 
@@ -236,9 +321,9 @@ def main() -> None:
                 st.dataframe(pd.DataFrame(flagged_rows), use_container_width=True)
 
         # ------------------------------------------------------------------
-        # Section 4: Config snapshot
+        # Section 5: Config snapshot
         # ------------------------------------------------------------------
-        st.header("4. Config Snapshot")
+        st.header("5. Config Snapshot")
 
         if cfg is None:
             st.warning("Could not load config (thresholds.yaml not found).")

@@ -6,13 +6,15 @@ built lazily (HTTP connections open only when the first request is made).
 
 Public API:
   build_orchestrator(cfg, store) -> Orchestrator
-  build_price_fn(dex_client)     -> async callable(mint: str) -> float | None
+  build_market_data_client(cfg)  -> configured scanner / price data client
+  build_price_fn(market_client)  -> async callable(mint: str) -> float | None
 """
 from __future__ import annotations
 
 import logging
 from typing import Optional
 
+from memedog.clients.bitget_mcp import BitgetMCPMarketDataClient
 from memedog.clients.dexscreener import DexScreenerClient
 from memedog.clients.helius import HeliusClient
 from memedog.clients.rugcheck import RugCheckClient
@@ -28,6 +30,13 @@ from memedog.scoring.engine import ScoreEngine
 from memedog.store import Store
 
 logger = logging.getLogger(__name__)
+
+
+def build_market_data_client(cfg: Config):
+    """Build the configured market-data client for scanner and price polling."""
+    if cfg.scanner.source == "bitget_mcp":
+        return BitgetMCPMarketDataClient(url=cfg.scanner.bitget_mcp_url)
+    return DexScreenerClient()
 
 
 def build_orchestrator(cfg: Config, store: Store) -> Orchestrator:
@@ -51,7 +60,7 @@ def build_orchestrator(cfg: Config, store: Store) -> Orchestrator:
     # -----------------------------------------------------------------------
     # Data clients
     # -----------------------------------------------------------------------
-    dex_client = DexScreenerClient()
+    scanner_client = build_market_data_client(cfg)
 
     rugcheck_client = RugCheckClient()
 
@@ -64,7 +73,7 @@ def build_orchestrator(cfg: Config, store: Store) -> Orchestrator:
     # -----------------------------------------------------------------------
     # Pipeline modules
     # -----------------------------------------------------------------------
-    scanner = Scanner(client=dex_client, cfg=cfg.scanner)
+    scanner = Scanner(client=scanner_client, cfg=cfg.scanner)
 
     hardfilter = HardFilter(rugcheck=rugcheck_client, cfg=cfg.hardfilter)
 
@@ -96,16 +105,16 @@ def build_orchestrator(cfg: Config, store: Store) -> Orchestrator:
     )
 
 
-def build_price_fn(dex_client: DexScreenerClient):
-    """Build an async price function that queries DexScreener for a mint's price.
+def build_price_fn(market_client):
+    """Build an async price function that queries the configured market-data source.
 
     The returned coroutine function is suitable for use with PriceWatcher.
     It returns the USD price (float) on success, or None on any failure.
 
     Parameters
     ----------
-    dex_client:
-        A :class:`~memedog.clients.dexscreener.DexScreenerClient` instance.
+    market_client:
+        Any client exposing ``get_token_price(mint)``.
 
     Returns
     -------
@@ -113,9 +122,9 @@ def build_price_fn(dex_client: DexScreenerClient):
     """
 
     async def price_fn(mint: str) -> Optional[float]:
-        """Fetch the latest USD price for *mint* from DexScreener."""
+        """Fetch the latest USD price for *mint*."""
         try:
-            return await dex_client.get_token_price(mint)
+            return await market_client.get_token_price(mint)
         except Exception as exc:
             logger.warning("price_fn: error fetching price for mint=%s: %s", mint, exc)
             return None

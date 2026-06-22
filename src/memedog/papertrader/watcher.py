@@ -29,7 +29,8 @@ class PriceWatcher:
         trader: PaperTrader used to call evaluate().
         price_fn: Async callable ``async (mint: str) -> float | None``.
                   Returns None when the price is temporarily unavailable.
-                  In production this wraps DexScreener; injected for tests.
+                  In production this wraps the configured market-data client;
+                  injected for tests.
         cfg: Paper trader config (price_poll_sec controls sleep duration).
     """
 

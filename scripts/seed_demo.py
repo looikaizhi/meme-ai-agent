@@ -20,6 +20,8 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
+from memedog.backtest import Backtester, PricePoint
+from memedog.config.settings import PaperTraderConfig
 from memedog.models import (
     HolderInfo,
     MomentumInfo,
@@ -200,8 +202,11 @@ def seed(db_path: str) -> None:
         (SignalType.BULLISH, 0.82),
         (SignalType.NEUTRAL, 0.55),
     ]
+    signals = []
     for cand, (stype, conf) in zip(candidates, sig_types):
-        store.save_signal(_signal(cand, stype, conf))
+        signal = _signal(cand, stype, conf)
+        signals.append(signal)
+        store.save_signal(signal)
 
     # Open positions for the first 2 BULLISH tokens
     for cand in candidates[:2]:
@@ -220,9 +225,36 @@ def seed(db_path: str) -> None:
     for cand, pnl_pct, reason, hold in trade_specs:
         store.save_trade(_trade(cand, pnl_pct, reason, hold))
 
+    paper_cfg = PaperTraderConfig(
+        entry_min_confidence=0.7,
+        size_usd=100.0,
+        take_profit_pct=0.5,
+        stop_loss_pct=0.25,
+        max_hold_minutes=120,
+        price_poll_sec=30,
+        starting_balance_usd=10_000.0,
+    )
+    price_history = {}
+    for idx, signal in enumerate(signals):
+        base = candidates[idx].price_usd
+        start = signal.created_at
+        if signal.signal == SignalType.BULLISH and signal.confidence >= 0.7:
+            multiplier = 1.55 if idx != 1 else 0.72
+        else:
+            multiplier = 1.02
+        price_history[signal.mint] = [
+            PricePoint(ts=start + timedelta(minutes=0), price=base),
+            PricePoint(ts=start + timedelta(minutes=20), price=base * 1.10),
+            PricePoint(ts=start + timedelta(minutes=45), price=base * multiplier),
+        ]
+
+    report = Backtester(paper_cfg).run(signals, price_history)
+    store.save_backtest_report("Seed Demo Backtest", report)
+
     store.close()
     print(
-        f"Done. Inserted: 5 snapshots, 5 signals, 2 open positions, 3 closed trades."
+        "Done. Inserted: 5 snapshots, 5 signals, 2 open positions, "
+        "3 closed trades, 1 backtest report."
     )
 
 

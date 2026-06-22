@@ -112,7 +112,7 @@ class Scanner:
 
             # Step 5: convert
             try:
-                candidate = self._convert(representative)
+                candidate = self._convert(representative, requested_mint=mint)
             except (KeyError, ValueError, TypeError) as exc:
                 logger.warning(
                     "Failed to convert pair %s for mint=%s: %s",
@@ -122,8 +122,10 @@ class Scanner:
                 )
                 continue
 
-            # Record seen and collect
-            self._seen[mint] = now_ts
+            # Record seen by canonical mint address and collect.  We use the
+            # emitted candidate mint rather than symbol/name so same-ticker
+            # meme coins never collapse into each other.
+            self._seen[candidate.mint] = now_ts
             candidates.append(candidate)
 
         return candidates
@@ -156,6 +158,14 @@ class Scanner:
                 continue
             if pair.get("chainId") != self._cfg.chain:
                 continue
+            if self._token_side_for_mint(pair, mint) is None:
+                logger.debug(
+                    "Skipping pair %s for requested mint=%s because neither "
+                    "baseToken nor quoteToken matches",
+                    pair.get("pairAddress"),
+                    mint,
+                )
+                continue
             chain_pairs.append(pair)
 
         if not chain_pairs:
@@ -175,6 +185,22 @@ class Scanner:
                 return 0.0
 
         return max(chain_pairs, key=_liquidity)
+
+    @staticmethod
+    def _token_side_for_mint(pair: dict, mint: str) -> dict | None:
+        """Return the pair token object matching *mint*.
+
+        Dex-style pair payloads can place the discovered token on either side
+        of the pair.  The scanner's canonical identity is the requested mint,
+        so conversion must not blindly use ``baseToken``.
+        """
+        for key in ("baseToken", "quoteToken"):
+            token = pair.get(key)
+            if not isinstance(token, dict):
+                continue
+            if token.get("address") == mint:
+                return token
+        return None
 
     @staticmethod
     def _parse_created_at(pair: dict) -> datetime:
@@ -208,13 +234,19 @@ class Scanner:
 
         return True
 
-    def _convert(self, pair: dict) -> TokenCandidate:
+    def _convert(self, pair: dict, requested_mint: str) -> TokenCandidate:
         """Convert a raw DexScreener pair dict to a :class:`TokenCandidate`."""
         created_at = self._parse_created_at(pair)
+        token = self._token_side_for_mint(pair, requested_mint)
+        if token is None:
+            raise ValueError(
+                f"pair {pair.get('pairAddress')} does not contain requested "
+                f"mint {requested_mint}"
+            )
         return TokenCandidate(
-            mint=pair["baseToken"]["address"],
+            mint=token["address"],
             pair_address=pair["pairAddress"],
-            symbol=pair["baseToken"]["symbol"],
+            symbol=token["symbol"],
             chain=self._cfg.chain,
             pair_created_at=created_at,
             price_usd=float(pair["priceUsd"]),

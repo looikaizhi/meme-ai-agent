@@ -26,8 +26,11 @@ async def main() -> None:
         stream=sys.stderr,
     )
 
-    from memedog.app_factory import build_orchestrator, build_price_fn
-    from memedog.clients.dexscreener import DexScreenerClient
+    from memedog.app_factory import (
+        build_market_data_client,
+        build_orchestrator,
+        build_price_fn,
+    )
     from memedog.config.settings import load_config
     from memedog.papertrader.watcher import PriceWatcher
     from memedog.papertrader.trader import PaperTrader
@@ -41,9 +44,9 @@ async def main() -> None:
 
     orch = build_orchestrator(cfg, store)
 
-    # Build the price function and PriceWatcher
-    dex_client = DexScreenerClient()
-    price_fn = build_price_fn(dex_client)
+    # Build the configured market-data price function and PriceWatcher.
+    price_client = build_market_data_client(cfg)
+    price_fn = build_price_fn(price_client)
     paper_trader = orch.paper_trader  # reuse the one already inside the orchestrator
     watcher = PriceWatcher(
         store=store,
@@ -65,7 +68,7 @@ async def main() -> None:
     except asyncio.CancelledError:
         logger.info("MemeDog Radar: tasks cancelled — shutting down")
     finally:
-        await dex_client.aclose()
+        await price_client.aclose()
         store.close()
         logger.info("MemeDog Radar stopped")
 

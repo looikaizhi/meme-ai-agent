@@ -106,6 +106,34 @@ def test_build_orchestrator_cfg_is_passed(cfg, store):
     assert orch._cfg is cfg
 
 
+def test_build_orchestrator_uses_bitget_mcp_scanner_by_default(cfg, store):
+    """The default scanner source wires the Bitget MCP discoverer into Scanner."""
+    from memedog.app_factory import build_orchestrator
+    from memedog.clients.bitget_mcp import BitgetMCPMarketDataClient
+
+    orch = build_orchestrator(cfg, store)
+
+    assert isinstance(orch._scanner._client, BitgetMCPMarketDataClient)
+
+
+def test_build_orchestrator_can_use_dexscreener_scanner_fallback(cfg, store):
+    """scanner.source=dexscreener keeps the old public-API fallback available."""
+    from memedog.app_factory import build_orchestrator
+    from memedog.clients.dexscreener import DexScreenerClient
+
+    cfg = cfg.model_copy(
+        update={
+            "scanner": cfg.scanner.model_copy(
+                update={"source": "dexscreener"}
+            )
+        }
+    )
+
+    orch = build_orchestrator(cfg, store)
+
+    assert isinstance(orch._scanner._client, DexScreenerClient)
+
+
 # ---------------------------------------------------------------------------
 # Test: build_price_fn returns a callable
 # ---------------------------------------------------------------------------

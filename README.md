@@ -15,7 +15,7 @@
 | **核心思想是什么?** | 一条**漏斗**:数百候选 → 个位数 → 只有这极少数才会触达(昂贵的)LLM。这让多 agent LLM 推理在高频场景下**可负担**。 |
 | **AI 在哪里?** | 一个 provider 无关的 LLM 层,基于真实链上数据跑 **Bull/Bear 双视角辩论 + 裁决终审**,并由确定性的规则打分作为客观锚点。 |
 | **怎么做到便宜?** | 默认 LLM 后端是把 **OpenAI Codex CLI 当子进程调用**,走 ChatGPT 订阅额度 → 近乎零按量成本。一行配置即可切换到 Claude / OpenAI / DeepSeek。 |
-| **是真的能跑吗?** | 是 —— 已对 **DexScreener、RugCheck、Helius、Telegram、Codex** 全部真实联网验证。测试由**真实抓取的 API 响应**驱动,另有可选的 live 真联网测试层。 |
+| **是真的能跑吗?** | 是 —— 已对 **Bitget market-data MCP、DexScreener fallback、RugCheck、Helius、Telegram、Codex** 全部真实联网验证。测试由**真实抓取的 API 响应**驱动,另有可选的 live 真联网测试层。 |
 
 ---
 
@@ -28,7 +28,7 @@
   ┌─────────────┐    ──────────────────►   ┌──────────────┐   幸存者(个位数)
   │ [1] Scanner │  TokenCandidate[]         │[2] HardFilter│  ──────────────────────────►
   └─────────────┘                           └──────────────┘
-   轮询 DexScreener                          三类红线闸门
+   轮询 Bitget MCP                           三类红线闸门
    初筛“有动量”                               (权限 / 集中度 / 流动性)
    去重                                       其余丢弃 ✂️
                                                    │
@@ -44,26 +44,38 @@
                                                               Signal: BULLISH / BEARISH / NEUTRAL
                                                               + confidence + 理由 + 红旗(red_flags)
                                                                          │
-                                          ┌──────────────────────────────┤
-                                          ▼                              ▼
+                                          ┌──────────────────────────────┼──────────────────────┐
+                                          ▼                              ▼                      ▼
                                   ┌────────────────┐            ┌──────────────────┐
-                                  │[6] PaperTrader │            │  看板 + 告警       │
+                                  │[6a] Backtester │            │[6b] PaperTrader  │
                                   └────────────────┘            └──────────────────┘
-                                   开虚拟仓                       Streamlit 看板
-                                   止盈/止损/超时平仓             + 可选 Telegram 推送
-                                   跟踪虚拟盈亏
+                                   历史价回放验证                  开虚拟仓
+                                   胜率/PNL/回撤                   止盈/止损/超时平仓
+                                          │                       跟踪虚拟盈亏
+                                          ▼
+                                  ┌────────────────┐
+                                  │ Bitget Playbook│
+                                  └────────────────┘
+                                   导出策略 prompt
+                                   外部回测/发布
+                                                                         │
+                                                                         ▼
+                                                               ┌──────────────────┐
+                                                               │  看板 + 告警       │
+                                                               └──────────────────┘
 ```
 
 ### 每一层具体做什么
 
 | # | 层 | 一句话职责 | 输入 → 输出 | 主要数据源 | 代码 |
 |---|-----|-----------|------------|-----------|------|
-| **1** | **Scanner(扫描器)** | 轮询新盘,只留有早期动量的,并去重 | `()` → `TokenCandidate[]` | DexScreener(免费) | [`scanner/`](src/memedog/scanner/) |
+| **1** | **Scanner(扫描器)** | 轮询新盘,只留有早期动量的,并按 mint 地址去重 | `()` → `TokenCandidate[]` | Bitget market-data MCP(默认) / DexScreener fallback | [`scanner/`](src/memedog/scanner/) |
 | **2** | **HardFilter(硬规则闸门)** | 在花任何 LLM 之前,用三类客观红线排掉 rug/蜜罐 | `TokenCandidate[]` → `TokenCandidate[]` | RugCheck | [`hardfilter/`](src/memedog/hardfilter/) |
-| **3** | **Enricher(数据富化)** | **并行**抓取 4 个信号维度,失败优雅降级 | `TokenCandidate` → `TokenSnapshot` | RugCheck · Helius RPC · DexScreener · X/Twitter | [`enricher/`](src/memedog/enricher/) |
+| **3** | **Enricher(数据富化)** | **并行**抓取 4 个信号维度,失败优雅降级 | `TokenCandidate` → `TokenSnapshot` | RugCheck · Helius RPC · Candidate momentum · X/Twitter | [`enricher/`](src/memedog/enricher/) |
 | **4** | **ScoreEngine(打分)** | 把 4 维映射成 **0–100** 加权分(给 LLM 的客观锚点) | `TokenSnapshot` → `Score` | 纯逻辑,配置驱动 | [`scoring/`](src/memedog/scoring/) |
 | **5** | **LLMJudge(裁决)** | 看多 vs 看空双角色辩论 → 裁决者综合出结构化信号 | `TokenSnapshot + Score` → `Signal` | LLM(默认 Codex CLI) | [`llmjudge/`](src/memedog/llmjudge/) |
-| **6** | **PaperTrader(模拟交易)** | 开虚拟仓,按止盈/止损/超时平仓,记录盈亏 | `Signal` → `Position / TradeRecord` | DexScreener(轮询价格) | [`papertrader/`](src/memedog/papertrader/) |
+| **6a** | **Backtester(历史验证)** | 回放历史价格,验证 MemeDog 信号是否有正期望 | `Signal[] + prices` → `BacktestReport` | 历史价格序列 / Bitget Playbook 外部回测 | [`backtest/`](src/memedog/backtest/) |
+| **6b** | **PaperTrader(模拟交易)** | 开虚拟仓,按止盈/止损/超时平仓,记录盈亏 | `Signal` → `Position / TradeRecord` | Bitget market-data MCP(轮询价格) | [`papertrader/`](src/memedog/papertrader/) |
 | **—** | **Dashboard / Alert(看板/告警)** | 可视化整条漏斗与盈亏;可选地把 BULLISH 信号推到 Telegram | 读取存储 | Streamlit · Telegram | [`dashboard/`](dashboard/) · [`alert/`](src/memedog/alert/) |
 
 > 各段由 [`orchestrator.py`](src/memedog/orchestrator.py) 串联;带类型的数据对象定义在 [`models/`](src/memedog/models/)(见[数据契约](plan/08-data-contracts.md))。
@@ -95,10 +107,52 @@
 |------|---------|---------|
 | 安全 / Rug | RugCheck(trustScore、riskLevel) | 能不能卖出?是不是蜜罐? |
 | 持币分布 | Helius RPC `getTokenLargestAccounts` | 集中度 / 砸盘风险 |
-| 资金 / 流动性 / 动量 | DexScreener | 是否有真实资金流入? |
+| 资金 / 流动性 / 动量 | Bitget market-data MCP `dex_market` / candidate pair data | 是否有真实资金流入? |
 | 聪明钱 / 社交 | Helius(标注钱包)+ X/Twitter | 叙事热度与聪明钱兴趣 |
 
 **LLM 裁决** → `Signal { signal, confidence, bull_points[], bear_points[], red_flags[], rationale }`。
+
+---
+
+## 4.1 Scanner 数据源与同名币处理
+
+Scanner 通过一个很小的 discovery 接口工作:
+
+```python
+fetch_latest_token_addresses(chain) -> list[str]
+get_token_pairs(mint) -> list[dict]
+```
+
+默认实现是 Bitget Hackathon Toolkit 里的 **market-data MCP** `dex_market` 工具。DexScreener 客户端保留为 fallback 和离线 fixture 测试源:
+
+```yaml
+scanner:
+  source: bitget_mcp      # 默认
+  bitget_mcp_url: https://datahub.noxiaohao.com/mcp
+```
+
+Bitget MCP 模式使用:
+
+- `dex_market(action="trending", chain="solana")` 发现候选 token 地址
+- `dex_market(action="token", token_address="solana/<mint>")` 拉取该 mint 的交易对详情
+
+无论使用哪个数据源,系统都把 **Solana mint 地址** 当作唯一身份,`symbol` 只用于展示。因此两个都叫 `DOGE` 的 meme coin 不会互相覆盖。Scanner 在转换 pair 时会检查 `baseToken` 和 `quoteToken`,只采用与请求 mint 匹配的一侧,避免把同一交易对里的 SOL/USDC 或另一个同名 token 误当成目标币。
+
+---
+
+## 4.2 Backtesting 与 Bitget Playbook
+
+MemeDog 有两层验证:
+
+1. **内部 Signal Backtester** —— 对实际输出的 `Signal` 做历史价回放,复用 PaperTrader 的入场/出场规则:
+   - 只交易 `BULLISH`
+   - `confidence >= entry_min_confidence`
+   - `take_profit_pct` / `stop_loss_pct` / `max_hold_minutes`
+   - 输出胜率、总 PnL、平均 PnL、profit factor、最大回撤、逐笔 `TradeRecord`
+
+2. **Bitget Playbook 导出** —— [`build_playbook_prompt`](src/memedog/backtest/playbook.py) 会生成可粘贴到 Bitget Playbook / GetAgent workflow 的策略 prompt,用于 hackathon 展示中的外部回测、指标表和发布。
+
+内部回测用于验证 **MemeDog 自己的信号质量**;Bitget Playbook 用于把同一套策略哲学转成可展示、可发布的量化策略回测。
 
 ---
 
@@ -139,7 +193,25 @@ codex login                      # 一次性浏览器登录你的 ChatGPT 账户
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Telegram 告警 | 告警静默跳过 |
 | `TWITTER_BEARER` | 社交热度 | 社交维度降级 |
 | Codex | LLM 裁决 | **无需 env key** —— 用 `codex login` |
-| DexScreener / RugCheck | 扫描 + 安全 | 无需 key(公开) |
+| Bitget market-data MCP | Scanner + 价格轮询 + news/sentiment 工具 | 默认公开 MCP URL,无需项目内 key |
+| DexScreener fallback / RugCheck | fallback 扫描 + 安全 | 无需 key(公开) |
+
+### Scanner 数据源
+
+默认使用 Bitget MCP:
+
+```yaml
+scanner:
+  source: bitget_mcp
+  bitget_mcp_url: https://datahub.noxiaohao.com/mcp
+```
+
+如需回退到 DexScreener:
+
+```yaml
+scanner:
+  source: dexscreener
+```
 
 ### 启动
 ```bash
@@ -155,7 +227,7 @@ streamlit run dashboard/app.py          # 实时看板(信号、漏斗、盈亏)
 测试采用**真实数据驱动**,分两层:
 
 - **默认套件 —— `pytest` → 446 个测试,完全离线、确定性。** 每个外部 API 测试都由**真实抓取的 API 响应体**驱动(存于 [`tests/fixtures/`](tests/fixtures/),可用 [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py) 刷新;密钥/PII 绝不入库)。已验证**零外部联网**。
-- **live 层 —— `pytest -m live` → 9 个测试**,真实命中 DexScreener / RugCheck / Helius / Codex / Telegram,并跑一次完整端到端 cycle。缺对应 key/二进制时各自自动 skip;Telegram 双重闸门(`MEMEDOG_LIVE_TELEGRAM=1`)防止误发。
+- **live 层 —— `pytest -m live` → 9 个测试**,真实命中 Bitget MCP / DexScreener fallback / RugCheck / Helius / Codex / Telegram,并跑一次完整端到端 cycle。缺对应 key/二进制时各自自动 skip;Telegram 双重闸门(`MEMEDOG_LIVE_TELEGRAM=1`)防止误发。
 
 五个外部集成 + 一次完整的真实 `run_cycle` 均已真实跑通并确认可用。
 
@@ -167,8 +239,8 @@ streamlit run dashboard/app.py          # 实时看板(信号、漏斗、盈亏)
 src/memedog/
 ├── orchestrator.py        # 把 1→6 各段串成漏斗 cycle
 ├── models/                # 带类型的数据契约(TokenCandidate → Signal → TradeRecord)
-├── clients/               # 每个 API 一个封装(dexscreener, rugcheck, helius, twitter)+ 带重试的基类
-├── scanner/  hardfilter/  enricher/  scoring/  llmjudge/  papertrader/
+├── clients/               # API 封装(dexscreener, bitget_mcp, rugcheck, helius, twitter)+ 带重试的基类
+├── scanner/  hardfilter/  enricher/  scoring/  llmjudge/  backtest/  papertrader/
 ├── llm/                   # provider 无关的 LLM 层(codex / litellm)+ 结构化输出
 ├── alert/                 # Telegram
 ├── config/                # settings.py + thresholds.yaml
