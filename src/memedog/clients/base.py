@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 
 import httpx
 
@@ -36,11 +37,20 @@ class BaseHTTPClient:
         timeout: float = 10.0,
         max_retries: int = 3,
         backoff_base: float = 0.2,
+        max_backoff: float = 10.0,
+        retry_status_codes: list[int] | None = None,
+        rate_limiter=None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
         self._max_retries = max_retries
         self._backoff_base = backoff_base
+        self._max_backoff = max_backoff
+        self._retry_status_codes = (
+            set(retry_status_codes) if retry_status_codes is not None
+            else {429, 500, 502, 503, 504}
+        )
+        self._rate_limiter = rate_limiter
         self._client = httpx.AsyncClient(timeout=timeout)
 
     # ------------------------------------------------------------------
@@ -54,6 +64,17 @@ class BaseHTTPClient:
             return url
         return self._base_url.rstrip("/") + "/" + url.lstrip("/")
 
+    @staticmethod
+    def _parse_retry_after(response: "httpx.Response") -> float | None:
+        """Return Retry-After seconds as float, or None if absent/unparseable."""
+        raw = response.headers.get("Retry-After")
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
     async def _request(
         self,
         method: str,
@@ -64,22 +85,31 @@ class BaseHTTPClient:
         last_exc: Exception | None = None
 
         for attempt in range(self._max_retries):
+            retry_after: float | None = None
             try:
-                response = await self._client.request(method, full_url, **kwargs)
+                if self._rate_limiter is not None:
+                    async with self._rate_limiter:
+                        response = await self._client.request(method, full_url, **kwargs)
+                else:
+                    response = await self._client.request(method, full_url, **kwargs)
                 if response.is_success:
                     return response.json()
-                # Non-2xx → treat as retryable server error
+
+                status = response.status_code
+                # Non-retryable status (e.g. 400/401/403/404) → fail immediately.
+                if status not in self._retry_status_codes:
+                    raise DataSourceError(
+                        f"{method} {full_url} returned {status}: {response.text[:200]}"
+                    )
+
                 last_exc = DataSourceError(
-                    f"{method} {full_url} returned {response.status_code}: "
-                    f"{response.text[:200]}"
+                    f"{method} {full_url} returned {status}: {response.text[:200]}"
                 )
+                if status in (429, 503):
+                    retry_after = self._parse_retry_after(response)
                 logger.warning(
-                    "Attempt %d/%d: %s %s → %d",
-                    attempt + 1,
-                    self._max_retries,
-                    method,
-                    full_url,
-                    response.status_code,
+                    "Attempt %d/%d: %s %s → %d (retryable)",
+                    attempt + 1, self._max_retries, method, full_url, status,
                 )
             except httpx.HTTPError as exc:
                 # Wrap as DataSourceError so the final raise does not leak
@@ -90,16 +120,16 @@ class BaseHTTPClient:
                 last_exc.__cause__ = exc  # preserve the original chain
                 logger.warning(
                     "Attempt %d/%d: %s %s → httpx error: %s",
-                    attempt + 1,
-                    self._max_retries,
-                    method,
-                    full_url,
-                    exc,
+                    attempt + 1, self._max_retries, method, full_url, exc,
                 )
 
-            # Sleep before next retry (not after the last attempt)
+            # Sleep before next retry (not after the last attempt).
             if attempt < self._max_retries - 1:
-                delay = self._backoff_base * (2 ** attempt)
+                if retry_after is not None:
+                    delay = min(retry_after, self._max_backoff)
+                else:
+                    upper = min(self._backoff_base * (2 ** attempt), self._max_backoff)
+                    delay = random.uniform(0, upper)
                 if delay > 0:
                     await asyncio.sleep(delay)
 

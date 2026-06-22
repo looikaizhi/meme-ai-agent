@@ -34,6 +34,11 @@ async def main() -> None:
     from memedog.store import Store
 
     cfg = load_config()
+
+    # Install secret redaction before anything logs a URL containing an API key.
+    from memedog.observability.redaction import install_redaction
+    install_redaction(cfg.settings)
+
     db_path = os.environ.get("MEMEDOG_DB", "memedog.db")
     store = Store(db_path)
 

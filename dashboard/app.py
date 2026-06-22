@@ -75,6 +75,14 @@ def main() -> None:
         except Exception:
             cfg = None
 
+        # Install secret redaction so dashboard logs never leak API keys.
+        if cfg is not None:
+            try:
+                from memedog.observability.redaction import install_redaction
+                install_redaction(cfg.settings)
+            except Exception:
+                pass
+
         # ------------------------------------------------------------------
         # Section 1: Live signal stream
         # ------------------------------------------------------------------

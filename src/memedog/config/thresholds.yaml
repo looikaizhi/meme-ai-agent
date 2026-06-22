@@ -52,3 +52,16 @@ alert:
   enabled: true
   only_signal: BULLISH
   min_confidence: 0.6
+http:
+  default:
+    timeout_sec: 10
+    max_retries: 3
+    backoff_base_sec: 0.2
+    max_backoff_sec: 10
+    max_concurrency: 4
+    min_interval_sec: 0.0
+    retry_status_codes: [429, 500, 502, 503, 504]
+  overrides:
+    dexscreener: { max_concurrency: 2, min_interval_sec: 1.0 }
+    rugcheck:    { min_interval_sec: 0.5 }
+    helius:      { max_concurrency: 2, min_interval_sec: 0.2 }
