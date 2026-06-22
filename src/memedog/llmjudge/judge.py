@@ -19,6 +19,14 @@ from memedog.models import Score, Signal, SignalType, TokenSnapshot
 log = logging.getLogger(__name__)
 
 
+class StepFinding(BaseModel):
+    """One step of the judge's multi-step reasoning workflow."""
+
+    step: str        # "safety" | "concentration" | "momentum" | "social" | "debate"
+    assessment: str  # "pass" | "concern" | "fail" | "neutral" | "missing"
+    note: str = ""
+
+
 class JudgeOut(BaseModel):
     """Schema for the LLM judge's final JSON output."""
 
@@ -28,6 +36,7 @@ class JudgeOut(BaseModel):
     bear_points: list[str]
     red_flags: list[str]
     rationale: str
+    workflow: list[StepFinding] = []
 
 
 def _map_signal(raw: str) -> SignalType:

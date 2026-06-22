@@ -17,7 +17,7 @@ from memedog.models import (
     TokenCandidate,
     TokenSnapshot,
 )
-from memedog.llmjudge.judge import LLMJudge, JudgeOut
+from memedog.llmjudge.judge import LLMJudge, JudgeOut, StepFinding
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +100,46 @@ def _make_fake_cfg():
         repair_retries=1,
         codex=CodexConfig(bin="codex", timeout_sec=30, sandbox="read-only"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-project A — JudgeOut.workflow schema (backward compatible)
+# ---------------------------------------------------------------------------
+
+
+def test_judgeout_parses_workflow_field():
+    """JudgeOut accepts a structured workflow array."""
+    data = {
+        "signal": "BULLISH",
+        "confidence": 0.7,
+        "bull_points": ["x"],
+        "bear_points": ["y"],
+        "red_flags": [],
+        "rationale": "ok",
+        "workflow": [
+            {"step": "safety", "assessment": "pass", "note": "authorities revoked"},
+            {"step": "momentum", "assessment": "concern", "note": "thin volume"},
+        ],
+    }
+    out = JudgeOut.model_validate(data)
+    assert len(out.workflow) == 2
+    assert out.workflow[0].step == "safety"
+    assert out.workflow[0].assessment == "pass"
+    assert isinstance(out.workflow[1], StepFinding)
+
+
+def test_judgeout_workflow_defaults_empty_when_absent():
+    """Old bodies without 'workflow' still parse (backward compat)."""
+    data = {
+        "signal": "BEARISH",
+        "confidence": 0.6,
+        "bull_points": [],
+        "bear_points": ["z"],
+        "red_flags": ["flag"],
+        "rationale": "old body",
+    }
+    out = JudgeOut.model_validate(data)
+    assert out.workflow == []
 
 
 # ---------------------------------------------------------------------------
