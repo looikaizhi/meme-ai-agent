@@ -77,7 +77,7 @@ async def test_live_judge_is_not_degraded():
         pytest.skip("codex binary not found on PATH (install + `codex login`)")
     cfg = load_config()
     cfg.llmjudge.codex.bin = bin_path
-    cfg.llmjudge.codex.timeout_sec = 240
+    cfg.llmjudge.codex.timeout_sec = 360
 
     snap, score = _strong_snapshot_score()
     judge = LLMJudge(cfg.llmjudge)  # production path: make_provider + cfg.codex

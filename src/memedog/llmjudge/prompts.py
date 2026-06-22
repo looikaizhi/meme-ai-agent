@@ -14,6 +14,107 @@ from memedog.models import Score, TokenSnapshot
 # ---------------------------------------------------------------------------
 
 
+def _fmt_money(v: float) -> str:
+    try:
+        return f"${v:,.0f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _fmt_pct(v: float) -> str:
+    try:
+        return f"{v:.1f}%"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _fmt_ratio(v: float) -> str:
+    try:
+        return f"{v:.2f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _evidence_line(label: str, available: bool, fields: list[tuple[str, str]]) -> str:
+    """Render one dimension line; DATA MISSING when unavailable or all fields empty."""
+    if not available or not fields:
+        return f"{label:<22}DATA MISSING (数据缺失)"
+    body = "  ".join(f"{name}={val}" for name, val in fields)
+    return f"{label:<22}{body}"
+
+
+def _snapshot_evidence(snapshot: TokenSnapshot, score: Score) -> str:
+    """Render the raw on-chain evidence block shared by all three prompts."""
+    s = snapshot.safety
+    h = snapshot.holders
+    m = snapshot.momentum
+    soc = snapshot.social
+
+    safety_fields: list[tuple[str, str]] = []
+    if s.mint_authority_revoked is not None:
+        safety_fields.append(("mint撤权", str(s.mint_authority_revoked)))
+    if s.freeze_authority_revoked is not None:
+        safety_fields.append(("freeze撤权", str(s.freeze_authority_revoked)))
+    if s.lp_burned_or_locked is not None:
+        safety_fields.append(("LP烧/锁", str(s.lp_burned_or_locked)))
+    if s.rug_trust_score is not None:
+        safety_fields.append(("trust", f"{s.rug_trust_score}/100"))
+    if s.rug_risk_level is not None:
+        safety_fields.append(("risk", str(s.rug_risk_level)))
+
+    holder_fields: list[tuple[str, str]] = []
+    if h.top10_pct is not None:
+        holder_fields.append(("top10", _fmt_pct(h.top10_pct)))
+    if h.max_wallet_pct is not None:
+        holder_fields.append(("最大钱包", _fmt_pct(h.max_wallet_pct)))
+    if h.dev_wallet_pct is not None:
+        holder_fields.append(("dev", _fmt_pct(h.dev_wallet_pct)))
+    if h.holder_count is not None:
+        holder_fields.append(("持币人", str(h.holder_count)))
+    if h.sniper_pct is not None:
+        holder_fields.append(("sniper", _fmt_pct(h.sniper_pct)))
+
+    mom_fields: list[tuple[str, str]] = []
+    if m.liquidity_usd is not None:
+        mom_fields.append(("流动性", _fmt_money(m.liquidity_usd)))
+    if m.volume_5m is not None:
+        mom_fields.append(("5min量", _fmt_money(m.volume_5m)))
+    if m.volume_1h is not None:
+        mom_fields.append(("1h量", _fmt_money(m.volume_1h)))
+    if m.buy_sell_ratio_5m is not None:
+        mom_fields.append(("买卖比", _fmt_ratio(m.buy_sell_ratio_5m)))
+    if m.unique_buyers_1h is not None:
+        mom_fields.append(("独立买家", str(m.unique_buyers_1h)))
+    if m.fdv_to_liquidity is not None:
+        mom_fields.append(("FDV/流", _fmt_ratio(m.fdv_to_liquidity)))
+
+    soc_fields: list[tuple[str, str]] = []
+    if soc.smart_money_buys is not None:
+        soc_fields.append(("聪明钱买入", str(soc.smart_money_buys)))
+    if soc.twitter_mentions_1h is not None:
+        soc_fields.append(("推特提及", str(soc.twitter_mentions_1h)))
+    if soc.twitter_growth is not None:
+        soc_fields.append(("推特增速", _fmt_ratio(soc.twitter_growth)))
+
+    lines = [
+        _evidence_line("SAFETY (RugCheck):", s.available, safety_fields),
+        _evidence_line("HOLDERS (Helius):", h.available, holder_fields),
+        _evidence_line("MOMENTUM (DexScreen):", m.available, mom_fields),
+        _evidence_line("SOCIAL:", soc.available, soc_fields),
+    ]
+
+    dim_map = {d.name: d.raw for d in score.dimensions}
+    pre = (
+        f"[规则预筛分(参考,非最终结论): 总分 {score.total:.1f}/100 | "
+        f"safety {dim_map.get('safety', float('nan')):.0f} "
+        f"holders {dim_map.get('holders', float('nan')):.0f} "
+        f"momentum {dim_map.get('momentum', float('nan')):.0f} "
+        f"social {dim_map.get('social', float('nan')):.0f}]"
+    )
+    lines.append(pre)
+    return "\n".join(lines)
+
+
 def _dimension_summary(snapshot: TokenSnapshot, score: Score) -> str:
     """Render a compact table of all four dimensions with scores and data flags."""
     dim_map = {d.name: d for d in score.dimensions}
@@ -66,24 +167,22 @@ def _missing_note(snapshot: TokenSnapshot) -> str:
 
 
 def bull_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
-    """Render a bullish advocate prompt for *snapshot* + *score*."""
+    """Render a bullish advocate prompt grounded in raw evidence."""
     symbol = snapshot.candidate.symbol
     mint = snapshot.candidate.mint
-    total = score.total
-    dim_summary = _dimension_summary(snapshot, score)
+    evidence = _snapshot_evidence(snapshot, score)
     missing_note = _missing_note(snapshot)
 
     system_content = (
-        "You are a bullish crypto analyst. Your job is to identify all positive signals "
-        "and reasons to BUY the token. Be specific and cite the data."
+        "You are a bullish crypto analyst. Identify all positive signals and reasons to BUY. "
+        "Cite concrete numbers from the evidence (引用证据中的具体数字). "
+        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty."
     )
     user_content = (
-        f"Analyze token {symbol} (mint: {mint}).\n"
-        f"Composite score: {total:.1f}/100\n\n"
-        f"Dimension scores:\n{dim_summary}"
+        f"Analyze token {symbol} (mint: {mint}).\n\n"
+        f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
-        "Make the strongest possible BULLISH case. List concrete bull points "
-        "supported by the data above."
+        "Make the strongest BULLISH case. Each bull point MUST cite a specific field/number above."
     )
     return [
         {"role": "system", "content": system_content},
@@ -92,24 +191,22 @@ def bull_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
 
 
 def bear_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
-    """Render a bearish advocate prompt for *snapshot* + *score*."""
+    """Render a bearish advocate prompt grounded in raw evidence."""
     symbol = snapshot.candidate.symbol
     mint = snapshot.candidate.mint
-    total = score.total
-    dim_summary = _dimension_summary(snapshot, score)
+    evidence = _snapshot_evidence(snapshot, score)
     missing_note = _missing_note(snapshot)
 
     system_content = (
-        "You are a bearish crypto analyst / risk officer. Your job is to identify all "
-        "risks, red flags, and reasons to AVOID the token. Be specific and cite the data."
+        "You are a bearish crypto analyst / risk officer. Identify all risks, red flags, and "
+        "reasons to AVOID. Cite concrete numbers from the evidence (引用证据中的具体数字). "
+        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty."
     )
     user_content = (
-        f"Analyze token {symbol} (mint: {mint}).\n"
-        f"Composite score: {total:.1f}/100\n\n"
-        f"Dimension scores:\n{dim_summary}"
+        f"Analyze token {symbol} (mint: {mint}).\n\n"
+        f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
-        "Make the strongest possible BEARISH case. List concrete bear points "
-        "and red flags supported by the data above."
+        "Make the strongest BEARISH case. Each bear point / red flag MUST cite a specific field/number above."
     )
     return [
         {"role": "system", "content": system_content},
@@ -123,33 +220,44 @@ def judge_prompt(
     bull_text: str,
     bear_text: str,
 ) -> list[LLMMessage]:
-    """Render the impartial judge prompt combining bull and bear arguments."""
+    """Render the impartial judge prompt with a fixed 6-step workflow."""
     symbol = snapshot.candidate.symbol
     mint = snapshot.candidate.mint
-    total = score.total
-    dim_summary = _dimension_summary(snapshot, score)
+    evidence = _snapshot_evidence(snapshot, score)
     missing_note = _missing_note(snapshot)
 
     system_content = (
-        "You are an impartial trading signal judge. You weigh bull and bear arguments "
-        "and produce a final verdict as a structured JSON object."
+        "You are an impartial trading signal judge. Reason through a fixed workflow, then "
+        "output a single structured JSON object. No prose outside the JSON."
     )
     user_content = (
-        f"Token: {symbol} (mint: {mint})\n"
-        f"Composite score: {total:.1f}/100\n\n"
-        f"Dimension scores:\n{dim_summary}"
+        f"Token: {symbol} (mint: {mint})\n\n"
+        f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
         f"=== BULL ARGUMENT ===\n{bull_text}\n\n"
         f"=== BEAR ARGUMENT ===\n{bear_text}\n\n"
-        "Based on the data and arguments above, produce a final trading signal.\n\n"
+        "Reason through these ordered steps before deciding:\n"
+        "  1. safety        — hard red lines? (mint/freeze authority not revoked, LP not burned/locked, CRITICAL/HIGH risk)\n"
+        "  2. concentration — top10 / largest wallet / dev / sniper healthy or concerning?\n"
+        "  3. momentum      — liquidity floor, 5m-vs-1h volume trend, buy pressure, FDV/liquidity sanity\n"
+        "  4. social        — weigh if available; if DATA MISSING, raise uncertainty (do not invent)\n"
+        "  5. debate        — which bull/bear points are data-backed vs speculative\n"
+        "  6. verdict       — map to BULLISH/BEARISH/NEUTRAL; LOWER confidence when key dimensions are missing\n\n"
         "Output ONLY a valid JSON object (no prose, no code fences) with these fields:\n"
         "{\n"
         '  "signal": "<one of: BULLISH, BEARISH, NEUTRAL>",\n'
         '  "confidence": <float between 0.0 and 1.0>,\n'
-        '  "bull_points": ["<key bull point>", ...],\n'
-        '  "bear_points": ["<key bear point>", ...],\n'
+        '  "bull_points": ["<key bull point citing data>", ...],\n'
+        '  "bear_points": ["<key bear point citing data>", ...],\n'
         '  "red_flags": ["<red flag>", ...],\n'
-        '  "rationale": "<1-2 sentence summary>"\n'
+        '  "rationale": "<1-2 sentence summary>",\n'
+        '  "workflow": [\n'
+        '    {"step": "safety", "assessment": "<pass|concern|fail|neutral|missing>", "note": "<short>"},\n'
+        '    {"step": "concentration", "assessment": "...", "note": "..."},\n'
+        '    {"step": "momentum", "assessment": "...", "note": "..."},\n'
+        '    {"step": "social", "assessment": "...", "note": "..."},\n'
+        '    {"step": "debate", "assessment": "...", "note": "..."}\n'
+        "  ]\n"
         "}"
     )
     return [

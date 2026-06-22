@@ -38,7 +38,8 @@ llmjudge:
   temperature: { bull: 0.5, bear: 0.5, judge: 0.2 }
   max_tokens: 1024
   repair_retries: 1
-  codex: { bin: "codex", timeout_sec: 120, sandbox: "read-only" }
+  codex: { bin: "codex", timeout_sec: 300, sandbox: "read-only" }
+  confidence_guard: { enabled: true, floor: 0.5 }
 papertrader:
   entry_min_confidence: 0.6
   size_usd: 100

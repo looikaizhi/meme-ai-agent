@@ -13,7 +13,12 @@ from memedog.models import (
     TokenCandidate,
     TokenSnapshot,
 )
-from memedog.llmjudge.prompts import bear_prompt, bull_prompt, judge_prompt
+from memedog.llmjudge.prompts import (
+    bear_prompt,
+    bull_prompt,
+    judge_prompt,
+    _snapshot_evidence,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +86,67 @@ def score():
 
 
 # ---------------------------------------------------------------------------
+# _snapshot_evidence tests (Task 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def snapshot_rich(candidate):
+    return TokenSnapshot(
+        candidate=candidate,
+        safety=SafetyInfo(
+            available=True, mint_authority_revoked=True, freeze_authority_revoked=True,
+            lp_burned_or_locked=True, rug_trust_score=78, rug_risk_level="LOW",
+        ),
+        holders=HolderInfo(
+            available=True, top10_pct=24.5, max_wallet_pct=6.2,
+            dev_wallet_pct=3.1, holder_count=412, sniper_pct=8.0,
+        ),
+        momentum=MomentumInfo(
+            available=True, liquidity_usd=42300.0, volume_5m=18400.0, volume_1h=96200.0,
+            buy_sell_ratio_5m=1.8, unique_buyers_1h=210, fdv_to_liquidity=3.2,
+        ),
+        social=SocialInfo(available=False),
+        enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+
+
+def test_evidence_contains_raw_values(snapshot_rich, score):
+    text = _snapshot_evidence(snapshot_rich, score)
+    assert "42,300" in text          # liquidity formatted with thousands sep
+    assert "24.5%" in text           # top10 pct
+    assert "78" in text              # trust score
+    assert "1.80" in text            # buy/sell ratio 2dp
+
+
+def test_evidence_marks_missing_dimension(snapshot_rich, score):
+    text = _snapshot_evidence(snapshot_rich, score)
+    # social is unavailable
+    assert "SOCIAL" in text.upper()
+    assert "DATA MISSING" in text.upper() or "缺失" in text
+
+
+def test_evidence_omits_none_fields(candidate, score):
+    # holders available but only top10 set; others None must not render "None"
+    snap = TokenSnapshot(
+        candidate=candidate,
+        safety=SafetyInfo(available=True, rug_trust_score=80),
+        holders=HolderInfo(available=True, top10_pct=20.0),
+        momentum=MomentumInfo(available=True, liquidity_usd=30000.0),
+        social=SocialInfo(available=False),
+        enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    text = _snapshot_evidence(snap, score)
+    assert "None" not in text
+
+
+def test_evidence_includes_prescore_reference(snapshot_rich, score):
+    text = _snapshot_evidence(snapshot_rich, score)
+    # the composite pre-score (72.5 from the `score` fixture) appears as reference
+    assert "72.5" in text
+
+
+# ---------------------------------------------------------------------------
 # bull_prompt tests
 # ---------------------------------------------------------------------------
 
@@ -112,6 +178,25 @@ def test_bull_prompt_returns_list_of_messages(snapshot_all_available, score):
     assert len(msgs) >= 1
     for m in msgs:
         assert "role" in m and "content" in m
+
+
+def test_bull_prompt_injects_raw_evidence(snapshot_rich, score):
+    msgs = bull_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "42,300" in all_text          # raw liquidity present
+    assert "top10" in all_text
+
+
+def test_bull_prompt_demands_data_citation(snapshot_rich, score):
+    msgs = bull_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs).lower()
+    assert "cite" in all_text or "引用" in all_text
+
+
+def test_bear_prompt_injects_raw_evidence(snapshot_rich, score):
+    msgs = bear_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "42,300" in all_text
 
 
 # ---------------------------------------------------------------------------
@@ -170,3 +255,22 @@ def test_judge_prompt_notes_missing_dimension(snapshot_social_missing, score):
     all_text = " ".join(m["content"] for m in msgs)
     assert "social" in all_text.lower()
     assert "missing" in all_text.lower() or "缺失" in all_text
+
+
+def test_judge_prompt_lists_workflow_steps(snapshot_all_available, score):
+    msgs = judge_prompt(snapshot_all_available, score, "bull", "bear")
+    all_text = " ".join(m["content"] for m in msgs).lower()
+    for step in ["safety", "concentration", "momentum", "social", "debate"]:
+        assert step in all_text, f"workflow step '{step}' missing from judge prompt"
+
+
+def test_judge_prompt_requests_workflow_json_field(snapshot_all_available, score):
+    msgs = judge_prompt(snapshot_all_available, score, "bull", "bear")
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "workflow" in all_text
+
+
+def test_judge_prompt_injects_raw_evidence(snapshot_rich, score):
+    msgs = judge_prompt(snapshot_rich, score, "bull", "bear")
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "42,300" in all_text

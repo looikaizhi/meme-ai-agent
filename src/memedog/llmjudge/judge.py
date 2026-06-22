@@ -5,7 +5,6 @@ LLMJudge orchestrates the three-role debate and maps the output to Signal.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -19,6 +18,14 @@ from memedog.models import Score, Signal, SignalType, TokenSnapshot
 log = logging.getLogger(__name__)
 
 
+class StepFinding(BaseModel):
+    """One step of the judge's multi-step reasoning workflow."""
+
+    step: str        # "safety" | "concentration" | "momentum" | "social" | "debate"
+    assessment: str  # "pass" | "concern" | "fail" | "neutral" | "missing"
+    note: str = ""
+
+
 class JudgeOut(BaseModel):
     """Schema for the LLM judge's final JSON output."""
 
@@ -28,6 +35,7 @@ class JudgeOut(BaseModel):
     bear_points: list[str]
     red_flags: list[str]
     rationale: str
+    workflow: list[StepFinding] = []
 
 
 def _map_signal(raw: str) -> SignalType:
@@ -56,6 +64,30 @@ def _degrade_signal(score_total: float) -> tuple[SignalType, float]:
         sig = SignalType.NEUTRAL
         confidence = _clamp(1.0 - abs(score_total - 55) / 15)
     return sig, confidence
+
+
+def _summarize_workflow(steps: list[StepFinding]) -> str:
+    """Compact one-line summary of workflow steps for the Signal.rationale."""
+    if not steps:
+        return ""
+    parts = []
+    for s in steps:
+        seg = f"{s.step}:{s.assessment}"
+        if s.note:
+            seg += f"({s.note})"
+        parts.append(seg)
+    return " | ".join(parts)
+
+
+def _completeness(snapshot: TokenSnapshot) -> float:
+    """Fraction of the 4 dimensions whose data is available."""
+    flags = [
+        snapshot.safety.available,
+        snapshot.holders.available,
+        snapshot.momentum.available,
+        snapshot.social.available,
+    ]
+    return sum(1 for f in flags if f) / 4.0
 
 
 class LLMJudge:
@@ -124,20 +156,23 @@ class LLMJudge:
             b_msgs = bull_prompt(snapshot, score)
             r_msgs = bear_prompt(snapshot, score)
 
-            # Run bull and bear concurrently
-            bull_text, bear_text = await asyncio.gather(
-                bull_provider.complete(
-                    model=bull_model,
-                    messages=b_msgs,
-                    temperature=bull_temp,
-                    max_tokens=self._cfg.max_tokens,
-                ),
-                bear_provider.complete(
-                    model=bear_model,
-                    messages=r_msgs,
-                    temperature=bear_temp,
-                    max_tokens=self._cfg.max_tokens,
-                ),
+            # Run bull then bear SEQUENTIALLY (not concurrently).
+            # The codex CLI runs against a single ChatGPT subscription; two
+            # simultaneous subprocesses get server-side throttled/queued, which
+            # in practice makes each call hang past the timeout. Sequential calls
+            # let each one use full throughput. Call order (bull=0, bear=1,
+            # judge=2) is preserved for FakeProvider index-based tests.
+            bull_text = await bull_provider.complete(
+                model=bull_model,
+                messages=b_msgs,
+                temperature=bull_temp,
+                max_tokens=self._cfg.max_tokens,
+            )
+            bear_text = await bear_provider.complete(
+                model=bear_model,
+                messages=r_msgs,
+                temperature=bear_temp,
+                max_tokens=self._cfg.max_tokens,
             )
 
             j_msgs = judge_prompt(snapshot, score, bull_text, bear_text)
@@ -154,6 +189,19 @@ class LLMJudge:
             sig_type = _map_signal(judge_out.signal)
             confidence = _clamp(judge_out.confidence)
 
+            # Confidence guard: cap by data completeness when enabled.
+            guard = getattr(self._cfg, "confidence_guard", None)
+            if guard is not None and getattr(guard, "enabled", False):
+                completeness = _completeness(snapshot)
+                cap = guard.floor + (1.0 - guard.floor) * completeness
+                confidence = min(confidence, cap)
+
+            # Fold the workflow step summary into the rationale (no schema change).
+            summary = _summarize_workflow(judge_out.workflow)
+            rationale = (
+                f"{summary}\n{judge_out.rationale}" if summary else judge_out.rationale
+            )
+
             return Signal(
                 mint=snapshot.candidate.mint,
                 symbol=snapshot.candidate.symbol,
@@ -163,7 +211,7 @@ class LLMJudge:
                 bull_points=judge_out.bull_points,
                 bear_points=judge_out.bear_points,
                 red_flags=judge_out.red_flags,
-                rationale=judge_out.rationale,
+                rationale=rationale,
                 created_at=datetime.now(tz=timezone.utc),
                 trace_id=snapshot.candidate.trace_id,
             )
