@@ -446,3 +446,40 @@ def test_funnel_event_empty_lists(store: Store) -> None:
     events = store.recent_funnel_events()
     assert events[0]["dropped"] == []
     assert events[0]["flagged"] == []
+
+
+class TestPipelineEvents:
+    def test_save_and_recent_events_roundtrip(self, tmp_path):
+        from memedog.store import Store
+
+        s = Store(str(tmp_path / "ev.db"))
+        try:
+            s.save_event("scan", status="ok", detail="5 candidates")
+            s.save_event("judge", trace_id="t1", mint="MINT", symbol="DOGX",
+                         status="ok", detail="BULLISH 0.78")
+            events = s.recent_events(limit=10)
+        finally:
+            s.close()
+
+        assert len(events) == 2
+        # newest first
+        assert events[0]["stage"] == "judge"
+        assert events[0]["symbol"] == "DOGX"
+        assert events[0]["status"] == "ok"
+        assert events[0]["detail"] == "BULLISH 0.78"
+        from datetime import datetime
+        assert isinstance(events[0]["ts"], datetime)
+        assert events[1]["stage"] == "scan"
+
+    def test_recent_events_limit(self, tmp_path):
+        from memedog.store import Store
+
+        s = Store(str(tmp_path / "ev2.db"))
+        try:
+            for i in range(10):
+                s.save_event("scan", detail=str(i))
+            events = s.recent_events(limit=3)
+        finally:
+            s.close()
+        assert len(events) == 3
+        assert events[0]["detail"] == "9"  # newest

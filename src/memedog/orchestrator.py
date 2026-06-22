@@ -76,6 +76,25 @@ class Orchestrator:
         """Read-only access to the injected paper trader."""
         return self._paper_trader
 
+    def _emit(
+        self,
+        stage: str,
+        *,
+        trace_id: str = "",
+        mint: str = "",
+        symbol: str = "",
+        status: str = "",
+        detail: str = "",
+    ) -> None:
+        """Emit a real-time pipeline event. Never raises."""
+        try:
+            self._store.save_event(
+                stage, trace_id=trace_id, mint=mint, symbol=symbol,
+                status=status, detail=detail,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("save_event failed for stage=%s: %s", stage, exc)
+
     async def run_cycle(self) -> list[Signal]:
         """Run one full pipeline cycle and return the collected signals.
 
@@ -90,6 +109,7 @@ class Orchestrator:
             return []
 
         logger.info("Cycle: scanner produced %d candidate(s)", len(candidates))
+        self._emit("scan", status="ok", detail=f"{len(candidates)} candidates")
 
         # Step 2 — HardFilter
         try:
@@ -103,6 +123,11 @@ class Orchestrator:
             len(survivors),
             len(candidates),
         )
+        self._emit("hardfilter", status="ok", detail=f"{len(survivors)}/{len(candidates)} passed")
+        for mint_d, reason_d in list(getattr(self._hardfilter, "dropped", [])):
+            self._emit("hardfilter", mint=mint_d, status="drop", detail=reason_d)
+        for mint_f, reason_f in list(getattr(self._hardfilter, "flagged", [])):
+            self._emit("hardfilter", mint=mint_f, status="flag", detail=reason_f)
 
         # Step 3 — Per-survivor pipeline
         signals: list[Signal] = []
@@ -111,20 +136,36 @@ class Orchestrator:
             mint = candidate.mint
             try:
                 # Enrich
+                self._emit("enrich", trace_id=candidate.trace_id, mint=mint,
+                           symbol=candidate.symbol, status="start")
                 snap = await self._enricher.enrich(candidate)
 
                 # Score
                 score = self._score_engine.score(snap)
+                self._emit("score", trace_id=candidate.trace_id, mint=mint,
+                           symbol=candidate.symbol, status="ok",
+                           detail=f"{score.total:.1f}/100")
 
                 # LLM judge
                 signal = await self._llm_judge.judge(snap, score)
+                degraded = "降级" in signal.rationale
+                self._emit("judge", trace_id=candidate.trace_id, mint=mint,
+                           symbol=candidate.symbol,
+                           status="degraded" if degraded else "ok",
+                           detail=f"{signal.signal.value} {signal.confidence:.2f}")
 
                 # Persist
                 self._store.save_snapshot(snap)
                 self._store.save_signal(signal)
+                self._emit("signal", trace_id=candidate.trace_id, mint=mint,
+                           symbol=candidate.symbol, status="ok",
+                           detail=f"{signal.signal.value} score={signal.score_total:.1f}")
 
                 # Paper trade
-                self._paper_trader.on_signal(signal, entry_price=candidate.price_usd)
+                pos = self._paper_trader.on_signal(signal, entry_price=candidate.price_usd)
+                if pos is not None:
+                    self._emit("trade", trace_id=candidate.trace_id, mint=mint,
+                               symbol=candidate.symbol, status="ok", detail="position opened")
 
                 # Alert (errors already swallowed inside maybe_notify)
                 try:
@@ -142,6 +183,7 @@ class Orchestrator:
                 )
 
             except Exception as exc:
+                self._emit("error", mint=mint, status="fail", detail=str(exc)[:200])
                 logger.warning(
                     "Cycle: skipping candidate %s due to error: %s",
                     mint,

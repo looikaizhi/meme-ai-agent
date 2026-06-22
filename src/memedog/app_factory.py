@@ -31,7 +31,7 @@ from memedog.store import Store
 logger = logging.getLogger(__name__)
 
 
-def build_orchestrator(cfg: Config, store: Store) -> Orchestrator:
+def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchestrator:
     """Construct and wire all pipeline modules; return a ready Orchestrator.
 
     All HTTP clients are constructed without making any network calls —
@@ -49,6 +49,24 @@ def build_orchestrator(cfg: Config, store: Store) -> Orchestrator:
     Orchestrator
         Ready to run, with all collaborators wired.
     """
+    # -----------------------------------------------------------------------
+    # Demo mode: inject offline fixture-driven components (no network / codex)
+    # -----------------------------------------------------------------------
+    if demo:
+        from memedog.demo.demo_source import (
+            DemoScanner, DemoEnricher, DemoRugCheckClient, ReplayProvider,
+        )
+        return Orchestrator(
+            scanner=DemoScanner(),
+            hardfilter=HardFilter(rugcheck=DemoRugCheckClient(), cfg=cfg.hardfilter),
+            enricher=DemoEnricher(),
+            score_engine=ScoreEngine(cfg=cfg.scoring),
+            llm_judge=LLMJudge(cfg.llmjudge, provider=ReplayProvider()),
+            paper_trader=PaperTrader(store=store, cfg=cfg.papertrader),
+            store=store,
+            cfg=cfg,
+        )
+
     # -----------------------------------------------------------------------
     # Data clients (each gets a per-source retry + rate-limit policy)
     # -----------------------------------------------------------------------

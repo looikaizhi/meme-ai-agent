@@ -196,3 +196,24 @@ def test_clients_get_rate_limiter_and_policy(cfg, store):
     assert isinstance(scanner_client._rate_limiter, AsyncRateLimiter)
     # dexscreener override leaves timeout at default → matches policy_for
     assert scanner_client._timeout == cfg.http.policy_for("dexscreener").timeout_sec
+
+
+def test_build_orchestrator_demo_injects_demo_components(cfg, store):
+    from memedog.app_factory import build_orchestrator
+    from memedog.demo.demo_source import DemoScanner, DemoEnricher, ReplayProvider
+
+    orch = build_orchestrator(cfg, store, demo=True)
+    assert isinstance(orch._scanner, DemoScanner)
+    assert isinstance(orch._enricher, DemoEnricher)
+    assert isinstance(orch._llm_judge._injected_provider, ReplayProvider)
+
+
+@pytest.mark.asyncio
+async def test_build_orchestrator_demo_cycle_runs_offline(cfg, store):
+    from memedog.app_factory import build_orchestrator
+
+    orch = build_orchestrator(cfg, store, demo=True)
+    signals = await orch.run_cycle()
+    assert len(signals) >= 1
+    stages = [e["stage"] for e in store.recent_events(limit=50)]
+    assert "judge" in stages and "signal" in stages

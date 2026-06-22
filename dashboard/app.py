@@ -18,6 +18,23 @@ import os
 # ---------------------------------------------------------------------------
 
 
+_STAGE_ICONS = {
+    "scan": "🔍", "hardfilter": "🚧", "enrich": "🧪", "score": "📊",
+    "judge": "⚖️", "signal": "📣", "trade": "💰", "error": "❌",
+}
+
+
+def format_event_row(event: dict) -> str:
+    """Render one pipeline event as a compact one-line string."""
+    icon = _STAGE_ICONS.get(event.get("stage", ""), "•")
+    ts = event.get("ts")
+    tstr = ts.strftime("%H:%M:%S") if hasattr(ts, "strftime") else str(ts)
+    sym = event.get("symbol") or event.get("mint", "")[:8] or "—"
+    status = event.get("status", "")
+    detail = event.get("detail", "")
+    return f"{tstr}  {icon} {event.get('stage','')}  {sym}  [{status}]  {detail}".rstrip()
+
+
 def main() -> None:
     """Render the MemeDog Radar dashboard."""
     import streamlit as st
@@ -40,7 +57,7 @@ def main() -> None:
     # All import and invocation is guarded so the app never crashes on older
     # Streamlit installs.
     # ------------------------------------------------------------------
-    _REFRESH_DEFAULT_SEC = 30
+    _REFRESH_DEFAULT_SEC = 3 if os.environ.get("MEMEDOG_DEMO") == "1" else 30
     if hasattr(st, "autorefresh"):
         # streamlit-autorefresh or Streamlit >= 1.28 native
         try:
@@ -82,6 +99,19 @@ def main() -> None:
                 install_redaction(cfg.settings)
             except Exception:
                 pass
+
+        # ------------------------------------------------------------------
+        # Section 0: Live activity stream (real-time pipeline events)
+        # ------------------------------------------------------------------
+        st.header("🔴 实时活动流 (Live Activity)")
+        try:
+            events = store.recent_events(limit=40)
+        except Exception:
+            events = []
+        if not events:
+            st.info("暂无事件。运行 `python -m memedog.serve --demo` 让漏斗流动起来。")
+        else:
+            st.code("\n".join(format_event_row(e) for e in events), language=None)
 
         # ------------------------------------------------------------------
         # Section 1: Live signal stream
