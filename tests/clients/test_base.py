@@ -261,6 +261,48 @@ class TestHttpxErrorWrapped:
         assert isinstance(exc_info.value.__cause__, DataSourceError)
 
 
+class TestRateLimiterIntegration:
+    async def test_rate_limiter_entered_per_attempt(self):
+        """The injected rate limiter is entered once per HTTP attempt."""
+        from memedog.clients.base import BaseHTTPClient
+
+        entries = 0
+
+        class _SpyLimiter:
+            async def __aenter__(self_):
+                nonlocal entries
+                entries += 1
+                return self_
+            async def __aexit__(self_, *exc):
+                return False
+
+        with respx.mock:
+            route = respx.get("https://api.example.com/x")
+            route.side_effect = [
+                httpx.Response(500, json={}),
+                httpx.Response(200, json={"ok": True}),
+            ]
+            async with BaseHTTPClient(
+                base_url="https://api.example.com", backoff_base=0,
+                rate_limiter=_SpyLimiter(),
+            ) as client:
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await client.get_json("/x")
+        assert result == {"ok": True}
+        assert entries == 2  # one 500 attempt + one 200 attempt
+
+    async def test_no_limiter_still_works(self):
+        from memedog.clients.base import BaseHTTPClient
+
+        with respx.mock:
+            respx.get("https://api.example.com/y").mock(
+                return_value=httpx.Response(200, json={"ok": True})
+            )
+            async with BaseHTTPClient(base_url="https://api.example.com") as client:
+                result = await client.get_json("/y")
+        assert result == {"ok": True}
+
+
 class TestHttpErrorRetry:
     async def test_httpx_error_triggers_retry(self):
         """httpx.HTTPError on first attempt should retry."""

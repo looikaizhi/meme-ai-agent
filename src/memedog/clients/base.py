@@ -87,7 +87,11 @@ class BaseHTTPClient:
         for attempt in range(self._max_retries):
             retry_after: float | None = None
             try:
-                response = await self._client.request(method, full_url, **kwargs)
+                if self._rate_limiter is not None:
+                    async with self._rate_limiter:
+                        response = await self._client.request(method, full_url, **kwargs)
+                else:
+                    response = await self._client.request(method, full_url, **kwargs)
                 if response.is_success:
                     return response.json()
 
