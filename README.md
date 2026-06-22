@@ -16,6 +16,7 @@
 | **AI 在哪里?** | 一个 provider 无关的 LLM 层,基于真实链上数据跑 **Bull/Bear 双视角辩论 + 裁决终审**,并由确定性的规则打分作为客观锚点。 |
 | **怎么做到便宜?** | 默认 LLM 后端是把 **OpenAI Codex CLI 当子进程调用**,走 ChatGPT 订阅额度 → 近乎零按量成本。一行配置即可切换到 Claude / OpenAI / DeepSeek。 |
 | **是真的能跑吗?** | 是 —— 已对 **DexScreener、RugCheck、Helius、Telegram、Codex** 全部真实联网验证。测试由**真实抓取的 API 响应**驱动,另有可选的 live 真联网测试层。 |
+| **怎么一眼看到效果?** | **一条命令** `python -m memedog.serve --demo` 同时拉起后端循环 + 实时看板,浏览器里能**实时看到 token 在漏斗里逐阶段流动**(离线、确定性、无需任何 key)。 |
 
 ---
 
@@ -62,11 +63,11 @@
 | **2** | **HardFilter(硬规则闸门)** | 在花任何 LLM 之前,用三类客观红线排掉 rug/蜜罐 | `TokenCandidate[]` → `TokenCandidate[]` | RugCheck | [`hardfilter/`](src/memedog/hardfilter/) |
 | **3** | **Enricher(数据富化)** | **并行**抓取 4 个信号维度,失败优雅降级 | `TokenCandidate` → `TokenSnapshot` | RugCheck · Helius RPC · DexScreener · X/Twitter | [`enricher/`](src/memedog/enricher/) |
 | **4** | **ScoreEngine(打分)** | 把 4 维映射成 **0–100** 加权分(给 LLM 的客观锚点) | `TokenSnapshot` → `Score` | 纯逻辑,配置驱动 | [`scoring/`](src/memedog/scoring/) |
-| **5** | **LLMJudge(裁决)** | 看多 vs 看空双角色辩论 → 裁决者综合出结构化信号 | `TokenSnapshot + Score` → `Signal` | LLM(默认 Codex CLI) | [`llmjudge/`](src/memedog/llmjudge/) |
+| **5** | **LLMJudge(裁决)** | 把原始链上证据喂给 Bull/Bear 双角色辩论,裁决者按**固定 6 步 workflow**(安全→集中度→动量→社交→辩论→裁决)推理出结构化信号,并用数据完备度给置信度封顶 | `TokenSnapshot + Score` → `Signal` | LLM(默认 Codex CLI) | [`llmjudge/`](src/memedog/llmjudge/) |
 | **6** | **PaperTrader(模拟交易)** | 开虚拟仓,按止盈/止损/超时平仓,记录盈亏 | `Signal` → `Position / TradeRecord` | DexScreener(轮询价格) | [`papertrader/`](src/memedog/papertrader/) |
-| **—** | **Dashboard / Alert(看板/告警)** | 可视化整条漏斗与盈亏;可选地把 BULLISH 信号推到 Telegram | 读取存储 | Streamlit · Telegram | [`dashboard/`](dashboard/) · [`alert/`](src/memedog/alert/) |
+| **—** | **Dashboard / Alert(看板/告警)** | 顶部**实时活动流**逐阶段滚动 + 信号/漏斗/盈亏可视化;可选地把 BULLISH 信号推到 Telegram | 读取存储 | Streamlit · Telegram | [`dashboard/`](dashboard/) · [`alert/`](src/memedog/alert/) |
 
-> 各段由 [`orchestrator.py`](src/memedog/orchestrator.py) 串联;带类型的数据对象定义在 [`models/`](src/memedog/models/)(见[数据契约](plan/08-data-contracts.md))。
+> 各段由 [`orchestrator.py`](src/memedog/orchestrator.py) 串联(每阶段发**实时事件**到 SQLite 供看板 tail);带类型的数据对象定义在 [`models/`](src/memedog/models/)(见[数据契约](plan/08-data-contracts.md))。一键服务器入口见 [`serve.py`](src/memedog/serve.py)。
 
 ---
 
@@ -78,6 +79,7 @@
    - `codex:<model>` → **CodexCLIProvider**(*本实验默认 —— 把 `codex exec` 当子进程,走 ChatGPT 订阅,零按量 API 成本*)
    - `litellm:<provider>/<model>` → LiteLLM(Claude / OpenAI / DeepSeek)用于对比
 4. **降级,而非崩溃。** 任一数据源失败 → 该维度标记“缺失”(打分自动重新归一,并在 prompt 中告知 LLM)—— 流水线继续。若 LLM 本身不可达,LLMJudge 退化为基于规则的兜底信号。
+5. **长跑要稳、不泄密。** HTTP 层做**错误分类重试**(4xx 不重试、429/503 读 `Retry-After`、退避加 jitter)+ **按数据源限流**(并发上限 + 最小间隔,防 429 被封);全局日志过滤器保证 **API key / token 永不进日志**。
 
 ---
 
@@ -108,8 +110,10 @@
 - **模型 / 数据契约:** `pydantic` v2
 - **LLM:** provider 无关接口 → **Codex CLI**(默认)/ LiteLLM(Claude·OpenAI·DeepSeek)
 - **配置:** `pydantic-settings` + `.env` + YAML 阈值文件(调策略不改代码)
-- **存储:** SQLite(快照 / 信号 / 仓位 / 漏斗事件)
-- **看板:** Streamlit · **告警:** Telegram Bot API(可选)
+- **存储:** SQLite(快照 / 信号 / 仓位 / 漏斗事件 / 逐阶段实时事件)
+- **看板:** Streamlit(实时活动流 + 信号/漏斗/盈亏)· **告警:** Telegram Bot API(可选)
+- **健壮性:** 错误分类重试 + 按源限流 + 全局密钥脱敏(`observability/redaction.py`)
+- **一键服务器:** `serve.py` launcher + 离线 `--demo` 模式
 
 ---
 
@@ -142,10 +146,22 @@ codex login                      # 一次性浏览器登录你的 ChatGPT 账户
 | DexScreener / RugCheck | 扫描 + 安全 | 无需 key(公开) |
 
 ### 启动
+
+**一键(推荐)—— 后端循环 + 实时看板一起拉起:**
 ```bash
-python -m memedog                       # 跑流水线(扫描 → … → 模拟交易)
+python -m memedog.serve --demo          # demo 模式:漏斗持续流动,离线确定性,无需任何 key
+python -m memedog.serve                 # 生产模式:真实 DexScreener/RugCheck/Helius/Codex
+```
+打开 `http://localhost:8501`,顶部"🔴 实时活动流"会随后端逐阶段滚动。`Ctrl-C` 一起优雅退出(看板子进程会被关闭)。
+常用参数:`--port`(看板端口)、`--db`(SQLite 路径)、`--scan-interval`(轮询间隔秒)。
+
+> **demo 模式**:用真实抓取的 fixtures 快速喂候选过**真实**的 HardFilter/ScoreEngine/裁决逻辑/PaperTrader,只把"慢 codex 调用"替换为已捕获的判决输出 → 几秒一个候选、全程离线,适合 5 分钟现场演示。
+
+**或分进程手动起:**
+```bash
+python -m memedog                       # 只跑流水线(扫描 → … → 模拟交易)
 python scripts/seed_demo.py             # 灌入示例数据用于看板演示
-streamlit run dashboard/app.py          # 实时看板(信号、漏斗、盈亏)
+streamlit run dashboard/app.py          # 只起看板
 ```
 
 ---
@@ -154,7 +170,7 @@ streamlit run dashboard/app.py          # 实时看板(信号、漏斗、盈亏)
 
 测试采用**真实数据驱动**,分两层:
 
-- **默认套件 —— `pytest` → 446 个测试,完全离线、确定性。** 每个外部 API 测试都由**真实抓取的 API 响应体**驱动(存于 [`tests/fixtures/`](tests/fixtures/),可用 [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py) 刷新;密钥/PII 绝不入库)。已验证**零外部联网**。
+- **默认套件 —— `pytest` → 501 个测试,完全离线、确定性。** 每个外部 API 测试都由**真实抓取的 API 响应体**驱动(存于 [`tests/fixtures/`](tests/fixtures/),可用 [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py) 刷新;密钥/PII 绝不入库)。已验证**零外部联网**(`pytest --disable-socket --allow-hosts=127.0.0.1,::1,localhost`)。覆盖智能重试/限流、密钥脱敏、实时事件流,以及完整的离线 `--demo` 端到端 cycle。
 - **live 层 —— `pytest -m live` → 9 个测试**,真实命中 DexScreener / RugCheck / Helius / Codex / Telegram,并跑一次完整端到端 cycle。缺对应 key/二进制时各自自动 skip;Telegram 双重闸门(`MEMEDOG_LIVE_TELEGRAM=1`)防止误发。
 
 五个外部集成 + 一次完整的真实 `run_cycle` 均已真实跑通并确认可用。
@@ -165,15 +181,18 @@ streamlit run dashboard/app.py          # 实时看板(信号、漏斗、盈亏)
 
 ```
 src/memedog/
-├── orchestrator.py        # 把 1→6 各段串成漏斗 cycle
+├── serve.py               # 一键 launcher(后端循环 + streamlit 子进程 + 优雅退出)
+├── orchestrator.py        # 把 1→6 各段串成漏斗 cycle,逐阶段发实时事件
 ├── models/                # 带类型的数据契约(TokenCandidate → Signal → TradeRecord)
-├── clients/               # 每个 API 一个封装(dexscreener, rugcheck, helius, twitter)+ 带重试的基类
+├── clients/               # 每个 API 一个封装 + 带重试/限流的基类 + ratelimit.py
 ├── scanner/  hardfilter/  enricher/  scoring/  llmjudge/  papertrader/
 ├── llm/                   # provider 无关的 LLM 层(codex / litellm)+ 结构化输出
+├── demo/                  # 离线 demo 源(fixture 候选 + ReplayProvider + 随机游走价格)
+├── observability/         # 全局密钥脱敏日志过滤器
 ├── alert/                 # Telegram
-├── config/                # settings.py + thresholds.yaml
-└── store.py               # SQLite 持久化
-dashboard/app.py           # Streamlit 看板
+├── config/                # settings.py + thresholds.yaml(含 http / 阈值 / 置信度护栏)
+└── store.py               # SQLite 持久化(含 pipeline_events 实时事件)
+dashboard/app.py           # Streamlit 看板(实时活动流 + 信号/漏斗/盈亏)
 plan/                      # 各模块设计文档(00 架构 … 08 数据契约)
 docs/superpowers/          # spec + 实现计划
 tests/  +  tests/live/     # 真实 fixture 套件 + 可选 live 层
@@ -188,7 +207,7 @@ tests/  +  tests/live/     # 真实 fixture 套件 + 可选 live 层
 - **仅模拟交易** —— 无钱包、无下单。盈亏为虚拟(默认忽略滑点/手续费)。
 - **Solana 优先。** 新币通常高度集中 / 无社交,因此真正的 `BULLISH` 裁决(理应)很少。
 - **Twitter** 需付费 X API 档位;没有时社交维度直接降级。
-- **LLM 延迟** 每次裁决约 50–80 秒(3 次调用);可接受,因为漏斗每轮只送极少数候选进来。
+- **LLM 延迟** 真实裁决约数十秒至数分钟(3 次顺序 codex 调用,受 ChatGPT 订阅吞吐影响);可接受,因为漏斗每轮只送极少数候选进来。**现场演示请用 `--demo`**,它 replay 已捕获的判决、瞬时出信号。
 
 ---
 
