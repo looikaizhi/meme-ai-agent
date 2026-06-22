@@ -102,12 +102,20 @@ class CodexConfig(BaseModel):
     sandbox: str
 
 
+class ConfidenceGuardConfig(BaseModel):
+    """Caps LLM confidence by data completeness (available dimensions / 4)."""
+
+    enabled: bool = True
+    floor: float = 0.5
+
+
 class LLMJudgeConfig(BaseModel):
     models: dict[str, str]
     temperature: dict[str, float]
     max_tokens: int
     repair_retries: int
     codex: CodexConfig
+    confidence_guard: ConfidenceGuardConfig = ConfidenceGuardConfig()
 
 
 class PaperTraderConfig(BaseModel):

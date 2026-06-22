@@ -107,6 +107,16 @@ def _make_fake_cfg():
 # ---------------------------------------------------------------------------
 
 
+def test_config_has_confidence_guard_defaults():
+    """LLMJudgeConfig exposes a confidence_guard with enabled + floor."""
+    from memedog.config import load_config
+
+    cfg = load_config().llmjudge
+    assert hasattr(cfg, "confidence_guard")
+    assert cfg.confidence_guard.enabled is True
+    assert 0.0 <= cfg.confidence_guard.floor <= 1.0
+
+
 def test_judgeout_parses_workflow_field():
     """JudgeOut accepts a structured workflow array."""
     data = {
