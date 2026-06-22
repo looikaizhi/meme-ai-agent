@@ -13,7 +13,12 @@ from memedog.models import (
     TokenCandidate,
     TokenSnapshot,
 )
-from memedog.llmjudge.prompts import bear_prompt, bull_prompt, judge_prompt
+from memedog.llmjudge.prompts import (
+    bear_prompt,
+    bull_prompt,
+    judge_prompt,
+    _snapshot_evidence,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +83,67 @@ def score():
         ],
         trace_id="trace-abc",
     )
+
+
+# ---------------------------------------------------------------------------
+# _snapshot_evidence tests (Task 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def snapshot_rich(candidate):
+    return TokenSnapshot(
+        candidate=candidate,
+        safety=SafetyInfo(
+            available=True, mint_authority_revoked=True, freeze_authority_revoked=True,
+            lp_burned_or_locked=True, rug_trust_score=78, rug_risk_level="LOW",
+        ),
+        holders=HolderInfo(
+            available=True, top10_pct=24.5, max_wallet_pct=6.2,
+            dev_wallet_pct=3.1, holder_count=412, sniper_pct=8.0,
+        ),
+        momentum=MomentumInfo(
+            available=True, liquidity_usd=42300.0, volume_5m=18400.0, volume_1h=96200.0,
+            buy_sell_ratio_5m=1.8, unique_buyers_1h=210, fdv_to_liquidity=3.2,
+        ),
+        social=SocialInfo(available=False),
+        enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+
+
+def test_evidence_contains_raw_values(snapshot_rich, score):
+    text = _snapshot_evidence(snapshot_rich, score)
+    assert "42,300" in text          # liquidity formatted with thousands sep
+    assert "24.5%" in text           # top10 pct
+    assert "78" in text              # trust score
+    assert "1.80" in text            # buy/sell ratio 2dp
+
+
+def test_evidence_marks_missing_dimension(snapshot_rich, score):
+    text = _snapshot_evidence(snapshot_rich, score)
+    # social is unavailable
+    assert "SOCIAL" in text.upper()
+    assert "DATA MISSING" in text.upper() or "缺失" in text
+
+
+def test_evidence_omits_none_fields(candidate, score):
+    # holders available but only top10 set; others None must not render "None"
+    snap = TokenSnapshot(
+        candidate=candidate,
+        safety=SafetyInfo(available=True, rug_trust_score=80),
+        holders=HolderInfo(available=True, top10_pct=20.0),
+        momentum=MomentumInfo(available=True, liquidity_usd=30000.0),
+        social=SocialInfo(available=False),
+        enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    text = _snapshot_evidence(snap, score)
+    assert "None" not in text
+
+
+def test_evidence_includes_prescore_reference(snapshot_rich, score):
+    text = _snapshot_evidence(snapshot_rich, score)
+    # the composite pre-score (72.5 from the `score` fixture) appears as reference
+    assert "72.5" in text
 
 
 # ---------------------------------------------------------------------------

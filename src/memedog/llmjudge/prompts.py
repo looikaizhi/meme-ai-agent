@@ -14,6 +14,107 @@ from memedog.models import Score, TokenSnapshot
 # ---------------------------------------------------------------------------
 
 
+def _fmt_money(v: float) -> str:
+    try:
+        return f"${v:,.0f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _fmt_pct(v: float) -> str:
+    try:
+        return f"{v:.1f}%"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _fmt_ratio(v: float) -> str:
+    try:
+        return f"{v:.2f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _evidence_line(label: str, available: bool, fields: list[tuple[str, str]]) -> str:
+    """Render one dimension line; DATA MISSING when unavailable or all fields empty."""
+    if not available or not fields:
+        return f"{label:<22}DATA MISSING (数据缺失)"
+    body = "  ".join(f"{name}={val}" for name, val in fields)
+    return f"{label:<22}{body}"
+
+
+def _snapshot_evidence(snapshot: TokenSnapshot, score: Score) -> str:
+    """Render the raw on-chain evidence block shared by all three prompts."""
+    s = snapshot.safety
+    h = snapshot.holders
+    m = snapshot.momentum
+    soc = snapshot.social
+
+    safety_fields: list[tuple[str, str]] = []
+    if s.mint_authority_revoked is not None:
+        safety_fields.append(("mint撤权", str(s.mint_authority_revoked)))
+    if s.freeze_authority_revoked is not None:
+        safety_fields.append(("freeze撤权", str(s.freeze_authority_revoked)))
+    if s.lp_burned_or_locked is not None:
+        safety_fields.append(("LP烧/锁", str(s.lp_burned_or_locked)))
+    if s.rug_trust_score is not None:
+        safety_fields.append(("trust", f"{s.rug_trust_score}/100"))
+    if s.rug_risk_level is not None:
+        safety_fields.append(("risk", str(s.rug_risk_level)))
+
+    holder_fields: list[tuple[str, str]] = []
+    if h.top10_pct is not None:
+        holder_fields.append(("top10", _fmt_pct(h.top10_pct)))
+    if h.max_wallet_pct is not None:
+        holder_fields.append(("最大钱包", _fmt_pct(h.max_wallet_pct)))
+    if h.dev_wallet_pct is not None:
+        holder_fields.append(("dev", _fmt_pct(h.dev_wallet_pct)))
+    if h.holder_count is not None:
+        holder_fields.append(("持币人", str(h.holder_count)))
+    if h.sniper_pct is not None:
+        holder_fields.append(("sniper", _fmt_pct(h.sniper_pct)))
+
+    mom_fields: list[tuple[str, str]] = []
+    if m.liquidity_usd is not None:
+        mom_fields.append(("流动性", _fmt_money(m.liquidity_usd)))
+    if m.volume_5m is not None:
+        mom_fields.append(("5min量", _fmt_money(m.volume_5m)))
+    if m.volume_1h is not None:
+        mom_fields.append(("1h量", _fmt_money(m.volume_1h)))
+    if m.buy_sell_ratio_5m is not None:
+        mom_fields.append(("买卖比", _fmt_ratio(m.buy_sell_ratio_5m)))
+    if m.unique_buyers_1h is not None:
+        mom_fields.append(("独立买家", str(m.unique_buyers_1h)))
+    if m.fdv_to_liquidity is not None:
+        mom_fields.append(("FDV/流", _fmt_ratio(m.fdv_to_liquidity)))
+
+    soc_fields: list[tuple[str, str]] = []
+    if soc.smart_money_buys is not None:
+        soc_fields.append(("聪明钱买入", str(soc.smart_money_buys)))
+    if soc.twitter_mentions_1h is not None:
+        soc_fields.append(("推特提及", str(soc.twitter_mentions_1h)))
+    if soc.twitter_growth is not None:
+        soc_fields.append(("推特增速", _fmt_ratio(soc.twitter_growth)))
+
+    lines = [
+        _evidence_line("SAFETY (RugCheck):", s.available, safety_fields),
+        _evidence_line("HOLDERS (Helius):", h.available, holder_fields),
+        _evidence_line("MOMENTUM (DexScreen):", m.available, mom_fields),
+        _evidence_line("SOCIAL:", soc.available, soc_fields),
+    ]
+
+    dim_map = {d.name: d.raw for d in score.dimensions}
+    pre = (
+        f"[规则预筛分(参考,非最终结论): 总分 {score.total:.1f}/100 | "
+        f"safety {dim_map.get('safety', float('nan')):.0f} "
+        f"holders {dim_map.get('holders', float('nan')):.0f} "
+        f"momentum {dim_map.get('momentum', float('nan')):.0f} "
+        f"social {dim_map.get('social', float('nan')):.0f}]"
+    )
+    lines.append(pre)
+    return "\n".join(lines)
+
+
 def _dimension_summary(snapshot: TokenSnapshot, score: Score) -> str:
     """Render a compact table of all four dimensions with scores and data flags."""
     dim_map = {d.name: d for d in score.dimensions}
