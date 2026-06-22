@@ -281,6 +281,77 @@ async def test_judge_result_has_bull_bear_red_flag_rationale():
 
 
 # ---------------------------------------------------------------------------
+# Sub-project A — workflow folding + confidence guard
+# ---------------------------------------------------------------------------
+
+
+def _make_snapshot_missing(n_missing: int):
+    """Snapshot with the last n dimensions marked unavailable (order: social, momentum, holders)."""
+    snap = _make_snapshot()
+    if n_missing >= 1:
+        snap.social = SocialInfo(available=False)
+    if n_missing >= 2:
+        snap.momentum = MomentumInfo(available=False)
+    if n_missing >= 3:
+        snap.holders = HolderInfo(available=False)
+    return snap
+
+
+def _judge_json_with_workflow(confidence=0.95):
+    return json.dumps({
+        "signal": "BULLISH",
+        "confidence": confidence,
+        "bull_points": ["strong liquidity $42,300"],
+        "bear_points": ["social missing"],
+        "red_flags": [],
+        "rationale": "Net positive.",
+        "workflow": [
+            {"step": "safety", "assessment": "pass", "note": "authorities revoked"},
+            {"step": "momentum", "assessment": "pass", "note": "liquidity healthy"},
+        ],
+    })
+
+
+@pytest.mark.asyncio
+async def test_judge_folds_workflow_into_rationale():
+    fp = FakeProvider(["bull", "bear", _judge_json_with_workflow(confidence=0.6)])
+    judge = LLMJudge(cfg=_make_fake_cfg(), provider=fp)
+    result = await judge.judge(_make_snapshot(), _make_score())
+    # rationale carries both the step summary and the original rationale
+    assert "safety:pass" in result.rationale
+    assert "Net positive." in result.rationale
+
+
+@pytest.mark.asyncio
+async def test_judge_confidence_guard_caps_on_missing_dimensions():
+    # 2 missing dimensions → completeness=0.5 → cap = 0.5 + 0.5*0.5 = 0.75
+    fp = FakeProvider(["bull", "bear", _judge_json_with_workflow(confidence=0.95)])
+    judge = LLMJudge(cfg=_make_fake_cfg(), provider=fp)
+    result = await judge.judge(_make_snapshot_missing(2), _make_score())
+    assert result.confidence == pytest.approx(0.75)
+
+
+@pytest.mark.asyncio
+async def test_judge_confidence_guard_noop_when_all_available():
+    fp = FakeProvider(["bull", "bear", _judge_json_with_workflow(confidence=0.9)])
+    judge = LLMJudge(cfg=_make_fake_cfg(), provider=fp)
+    # all 4 available → completeness=1.0 → cap=1.0 → unchanged
+    result = await judge.judge(_make_snapshot(), _make_score())
+    assert result.confidence == pytest.approx(0.9)
+
+
+@pytest.mark.asyncio
+async def test_judge_confidence_guard_disabled():
+    from memedog.config.settings import ConfidenceGuardConfig
+    cfg = _make_fake_cfg()
+    cfg.confidence_guard = ConfidenceGuardConfig(enabled=False, floor=0.5)
+    fp = FakeProvider(["bull", "bear", _judge_json_with_workflow(confidence=0.95)])
+    judge = LLMJudge(cfg=cfg, provider=fp)
+    result = await judge.judge(_make_snapshot_missing(3), _make_score())
+    assert result.confidence == pytest.approx(0.95)  # not capped
+
+
+# ---------------------------------------------------------------------------
 # Task 6 — degrade path
 # ---------------------------------------------------------------------------
 

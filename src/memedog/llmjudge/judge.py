@@ -67,6 +67,30 @@ def _degrade_signal(score_total: float) -> tuple[SignalType, float]:
     return sig, confidence
 
 
+def _summarize_workflow(steps: list[StepFinding]) -> str:
+    """Compact one-line summary of workflow steps for the Signal.rationale."""
+    if not steps:
+        return ""
+    parts = []
+    for s in steps:
+        seg = f"{s.step}:{s.assessment}"
+        if s.note:
+            seg += f"({s.note})"
+        parts.append(seg)
+    return " | ".join(parts)
+
+
+def _completeness(snapshot: TokenSnapshot) -> float:
+    """Fraction of the 4 dimensions whose data is available."""
+    flags = [
+        snapshot.safety.available,
+        snapshot.holders.available,
+        snapshot.momentum.available,
+        snapshot.social.available,
+    ]
+    return sum(1 for f in flags if f) / 4.0
+
+
 class LLMJudge:
     """Runs a three-role (bull / bear / judge) LLM debate and emits a Signal.
 
@@ -163,6 +187,19 @@ class LLMJudge:
             sig_type = _map_signal(judge_out.signal)
             confidence = _clamp(judge_out.confidence)
 
+            # Confidence guard: cap by data completeness when enabled.
+            guard = getattr(self._cfg, "confidence_guard", None)
+            if guard is not None and getattr(guard, "enabled", False):
+                completeness = _completeness(snapshot)
+                cap = guard.floor + (1.0 - guard.floor) * completeness
+                confidence = min(confidence, cap)
+
+            # Fold the workflow step summary into the rationale (no schema change).
+            summary = _summarize_workflow(judge_out.workflow)
+            rationale = (
+                f"{summary}\n{judge_out.rationale}" if summary else judge_out.rationale
+            )
+
             return Signal(
                 mint=snapshot.candidate.mint,
                 symbol=snapshot.candidate.symbol,
@@ -172,7 +209,7 @@ class LLMJudge:
                 bull_points=judge_out.bull_points,
                 bear_points=judge_out.bear_points,
                 red_flags=judge_out.red_flags,
-                rationale=judge_out.rationale,
+                rationale=rationale,
                 created_at=datetime.now(tz=timezone.utc),
                 trace_id=snapshot.candidate.trace_id,
             )
