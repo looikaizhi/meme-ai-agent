@@ -220,33 +220,44 @@ def judge_prompt(
     bull_text: str,
     bear_text: str,
 ) -> list[LLMMessage]:
-    """Render the impartial judge prompt combining bull and bear arguments."""
+    """Render the impartial judge prompt with a fixed 6-step workflow."""
     symbol = snapshot.candidate.symbol
     mint = snapshot.candidate.mint
-    total = score.total
-    dim_summary = _dimension_summary(snapshot, score)
+    evidence = _snapshot_evidence(snapshot, score)
     missing_note = _missing_note(snapshot)
 
     system_content = (
-        "You are an impartial trading signal judge. You weigh bull and bear arguments "
-        "and produce a final verdict as a structured JSON object."
+        "You are an impartial trading signal judge. Reason through a fixed workflow, then "
+        "output a single structured JSON object. No prose outside the JSON."
     )
     user_content = (
-        f"Token: {symbol} (mint: {mint})\n"
-        f"Composite score: {total:.1f}/100\n\n"
-        f"Dimension scores:\n{dim_summary}"
+        f"Token: {symbol} (mint: {mint})\n\n"
+        f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
         f"=== BULL ARGUMENT ===\n{bull_text}\n\n"
         f"=== BEAR ARGUMENT ===\n{bear_text}\n\n"
-        "Based on the data and arguments above, produce a final trading signal.\n\n"
+        "Reason through these ordered steps before deciding:\n"
+        "  1. safety        — hard red lines? (mint/freeze authority not revoked, LP not burned/locked, CRITICAL/HIGH risk)\n"
+        "  2. concentration — top10 / largest wallet / dev / sniper healthy or concerning?\n"
+        "  3. momentum      — liquidity floor, 5m-vs-1h volume trend, buy pressure, FDV/liquidity sanity\n"
+        "  4. social        — weigh if available; if DATA MISSING, raise uncertainty (do not invent)\n"
+        "  5. debate        — which bull/bear points are data-backed vs speculative\n"
+        "  6. verdict       — map to BULLISH/BEARISH/NEUTRAL; LOWER confidence when key dimensions are missing\n\n"
         "Output ONLY a valid JSON object (no prose, no code fences) with these fields:\n"
         "{\n"
         '  "signal": "<one of: BULLISH, BEARISH, NEUTRAL>",\n'
         '  "confidence": <float between 0.0 and 1.0>,\n'
-        '  "bull_points": ["<key bull point>", ...],\n'
-        '  "bear_points": ["<key bear point>", ...],\n'
+        '  "bull_points": ["<key bull point citing data>", ...],\n'
+        '  "bear_points": ["<key bear point citing data>", ...],\n'
         '  "red_flags": ["<red flag>", ...],\n'
-        '  "rationale": "<1-2 sentence summary>"\n'
+        '  "rationale": "<1-2 sentence summary>",\n'
+        '  "workflow": [\n'
+        '    {"step": "safety", "assessment": "<pass|concern|fail|neutral|missing>", "note": "<short>"},\n'
+        '    {"step": "concentration", "assessment": "...", "note": "..."},\n'
+        '    {"step": "momentum", "assessment": "...", "note": "..."},\n'
+        '    {"step": "social", "assessment": "...", "note": "..."},\n'
+        '    {"step": "debate", "assessment": "...", "note": "..."}\n'
+        "  ]\n"
         "}"
     )
     return [

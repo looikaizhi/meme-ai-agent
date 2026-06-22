@@ -255,3 +255,22 @@ def test_judge_prompt_notes_missing_dimension(snapshot_social_missing, score):
     all_text = " ".join(m["content"] for m in msgs)
     assert "social" in all_text.lower()
     assert "missing" in all_text.lower() or "缺失" in all_text
+
+
+def test_judge_prompt_lists_workflow_steps(snapshot_all_available, score):
+    msgs = judge_prompt(snapshot_all_available, score, "bull", "bear")
+    all_text = " ".join(m["content"] for m in msgs).lower()
+    for step in ["safety", "concentration", "momentum", "social", "debate"]:
+        assert step in all_text, f"workflow step '{step}' missing from judge prompt"
+
+
+def test_judge_prompt_requests_workflow_json_field(snapshot_all_available, score):
+    msgs = judge_prompt(snapshot_all_available, score, "bull", "bear")
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "workflow" in all_text
+
+
+def test_judge_prompt_injects_raw_evidence(snapshot_rich, score):
+    msgs = judge_prompt(snapshot_rich, score, "bull", "bear")
+    all_text = " ".join(m["content"] for m in msgs)
+    assert "42,300" in all_text
