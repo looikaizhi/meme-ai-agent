@@ -1408,6 +1408,16 @@ Run(可选观感):`python -m memedog.serve --port 8599`,观察实时活动流是
 
 ## 自审清单(写计划后)
 
+## 执行记录(2026-06-23)
+
+- [x] 实现 Task 1-10 的代码/测试内容: `DiscoveryConfig`, realtime discovery package, PumpPortal/Helius feeds, `CompositeFeed`, `MigrationDiscoverer`, app/runtime wiring, capture entry, live tests.
+- [x] 验证默认离线套件: `.venv/bin/python -m pytest -q` -> `528 passed, 1 skipped, 11 deselected`.
+- [x] 验证语法 smoke: `ast.parse` for `src/memedog/__main__.py` and `scripts/capture_fixtures.py` -> `ok`.
+- [x] 刷新 editable install: `.venv/bin/python -m pip install -e . -q` -> pass after network escalation.
+- [x] 安装/验证 pytest-socket: `.venv/bin/python -m pytest -q --disable-socket --allow-hosts=127.0.0.1,::1,localhost` -> `528 passed, 1 skipped, 11 deselected`.
+- [x] 下载 `superpowers:subagent-driven-development` / `superpowers:executing-plans`: installed from `obra/superpowers` as local Codex skills `subagent-driven-development` and `executing-plans`; restart Codex to load them.
+- [ ] 逐任务 git commit: not run in this execution pass.
+
 - **Spec 覆盖**:
   - §3 架构 / §4.1 协议 → Task3(feed.py);§4.2 缓冲 → Task2;§4.3 PumpPortal → Task3+4;§4.4 Helius → Task5;§4.5 Composite → Task6;§4.6 适配器 → Task7。
   - §5 生命周期/配置/依赖 → Task1(配置+依赖)+ Task8(装配)+ Task9(后台任务)。

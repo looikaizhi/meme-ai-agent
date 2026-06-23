@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from memedog.app_factory import build_orchestrator, build_price_fn
+
 logger = logging.getLogger(__name__)
 
 _DASHBOARD = str(Path(__file__).resolve().parents[2] / "dashboard" / "app.py")
@@ -44,7 +46,6 @@ async def run_server(
     popen=subprocess.Popen,
 ) -> None:
     """Run backend loop + streamlit subprocess until stop_event is set."""
-    from memedog.app_factory import build_orchestrator, build_price_fn
     from memedog.clients.dexscreener import DexScreenerClient
     from memedog.config import load_config
     from memedog.observability.redaction import install_redaction
@@ -81,10 +82,13 @@ async def run_server(
     logger.info("Streamlit launched on port %d (db=%s, demo=%s)", port, db_path, demo)
 
     async def _backend():
-        await asyncio.gather(
+        tasks = [
             orch.run_forever(stop_event=stop_event),
             watcher.run(stop_event=stop_event),
-        )
+        ]
+        if getattr(orch, "feed", None) is not None:
+            tasks.append(orch.feed.run(stop_event))
+        await asyncio.gather(*tasks)
 
     backend_task = asyncio.create_task(_backend())
     try:

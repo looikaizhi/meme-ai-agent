@@ -47,3 +47,53 @@ async def test_run_server_spawns_and_terminates(tmp_path, monkeypatch):
     )
     assert "cmd" in spawned  # streamlit was launched
     fake_proc.terminate.assert_called()  # terminated on shutdown
+
+
+@pytest.mark.asyncio
+async def test_run_server_starts_feed_when_present(tmp_path, monkeypatch):
+    started = {"feed": False}
+
+    class _Feed:
+        def recent_mints(self):
+            return []
+
+        async def run(self, stop_event):
+            started["feed"] = True
+            await stop_event.wait()
+
+    class _Orch:
+        feed = _Feed()
+        paper_trader = MagicMock()
+
+        async def run_forever(self, stop_event=None):
+            await stop_event.wait()
+
+    monkeypatch.setattr(serve, "build_orchestrator", lambda cfg, store, demo: _Orch())
+    monkeypatch.setattr(serve, "build_price_fn", lambda dex: (lambda mint: None))
+
+    class _Watcher:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, stop_event=None):
+            await stop_event.wait()
+
+    monkeypatch.setattr("memedog.papertrader.watcher.PriceWatcher", _Watcher)
+
+    fake_proc = MagicMock()
+    fake_proc.poll.return_value = None
+    stop = asyncio.Event()
+
+    async def _stopper():
+        await asyncio.sleep(0.05)
+        stop.set()
+
+    asyncio.create_task(_stopper())
+    await serve.run_server(
+        demo=False,
+        port=8602,
+        db_path=str(tmp_path / "s.db"),
+        stop_event=stop,
+        popen=lambda *args, **kwargs: fake_proc,
+    )
+    assert started["feed"] is True

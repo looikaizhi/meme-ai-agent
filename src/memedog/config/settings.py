@@ -154,6 +154,16 @@ class HTTPConfig(BaseModel):
         return self.default.model_copy(update=ov) if ov else self.default
 
 
+class DiscoveryConfig(BaseModel):
+    pumpportal_ws_url: str = "wss://pumpportal.fun/api/data"
+    helius_enabled: bool = True
+    helius_ws_url: str = "wss://mainnet.helius-rpc.com/?api-key={api_key}"
+    pumpfun_program_id: str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+    buffer_ttl_min: int = 20
+    reconnect_backoff_initial_sec: float = 1.0
+    reconnect_backoff_max_sec: float = 30.0
+
+
 # ---------------------------------------------------------------------------
 # Settings (secrets from .env)
 # ---------------------------------------------------------------------------
@@ -188,6 +198,7 @@ class Config(BaseModel):
     papertrader: PaperTraderConfig
     alert: AlertConfig
     http: HTTPConfig = HTTPConfig()
+    discovery: DiscoveryConfig = DiscoveryConfig()
     settings: Settings
 
 
@@ -211,5 +222,6 @@ def load_config(yaml_path: str | Path | None = None) -> Config:
         papertrader=PaperTraderConfig.model_validate(raw["papertrader"]),
         alert=AlertConfig.model_validate(raw["alert"]),
         http=HTTPConfig.model_validate(raw.get("http", {})),
+        discovery=DiscoveryConfig.model_validate(raw.get("discovery", {})),
         settings=Settings(),
     )

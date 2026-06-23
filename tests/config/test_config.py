@@ -244,3 +244,26 @@ class TestHTTPConfig:
         p.write_text(yaml.safe_dump(raw), encoding="utf-8")
         cfg2 = load_config(p)
         assert cfg2.http.default.max_retries >= 1
+
+
+class TestDiscoveryConfig:
+    def test_discovery_config_loaded_with_defaults(self):
+        from memedog.config.settings import DiscoveryConfig, load_config
+
+        cfg = load_config()
+        assert isinstance(cfg.discovery, DiscoveryConfig)
+        assert cfg.discovery.pumpportal_ws_url.startswith("wss://")
+        assert isinstance(cfg.discovery.helius_enabled, bool)
+        assert cfg.discovery.buffer_ttl_min > 0
+        assert cfg.discovery.reconnect_backoff_initial_sec > 0
+        assert (
+            cfg.discovery.reconnect_backoff_max_sec
+            >= cfg.discovery.reconnect_backoff_initial_sec
+        )
+        assert cfg.discovery.pumpfun_program_id
+
+    def test_scanner_min_pair_age_allows_just_graduated(self):
+        from memedog.config.settings import load_config
+
+        cfg = load_config()
+        assert cfg.scanner.min_pair_age_min == 0

@@ -191,8 +191,8 @@ def test_clients_get_rate_limiter_and_policy(cfg, store):
     from memedog.clients.ratelimit import AsyncRateLimiter
 
     orch = build_orchestrator(cfg, store)
-    # scanner's client is the dexscreener client
-    scanner_client = orch._scanner._client
+    # scanner's client is the migration adapter; pair enrichment still uses DexScreener
+    scanner_client = orch._scanner._client._dex
     assert isinstance(scanner_client._rate_limiter, AsyncRateLimiter)
     # dexscreener override leaves timeout at default → matches policy_for
     assert scanner_client._timeout == cfg.http.policy_for("dexscreener").timeout_sec
@@ -217,3 +217,27 @@ async def test_build_orchestrator_demo_cycle_runs_offline(cfg, store):
     assert len(signals) >= 1
     stages = [e["stage"] for e in store.recent_events(limit=50)]
     assert "judge" in stages and "signal" in stages
+
+
+def test_build_discovery_returns_feed_and_discoverer(cfg):
+    from memedog.app_factory import build_discovery
+    from memedog.discovery.discoverer import MigrationDiscoverer
+
+    feed, discoverer = build_discovery(cfg)
+    assert isinstance(discoverer, MigrationDiscoverer)
+    assert hasattr(feed, "run") and hasattr(feed, "recent_mints")
+
+
+def test_production_orchestrator_exposes_feed(cfg, store):
+    from memedog.app_factory import build_orchestrator
+
+    orch = build_orchestrator(cfg, store, demo=False)
+    assert orch.feed is not None
+    assert hasattr(orch.feed, "run")
+
+
+def test_demo_orchestrator_has_no_feed(cfg, store):
+    from memedog.app_factory import build_orchestrator
+
+    orch = build_orchestrator(cfg, store, demo=True)
+    assert orch.feed is None

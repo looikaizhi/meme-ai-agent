@@ -65,8 +65,12 @@ async def main() -> None:
     async def run_watcher():
         await watcher.run(stop_event=stop_event)
 
+    async def run_feed():
+        if getattr(orch, "feed", None) is not None:
+            await orch.feed.run(stop_event)
+
     try:
-        await asyncio.gather(run_orch(), run_watcher())
+        await asyncio.gather(run_orch(), run_watcher(), run_feed())
     except asyncio.CancelledError:
         logger.info("MemeDog Radar: tasks cancelled — shutting down")
     finally:

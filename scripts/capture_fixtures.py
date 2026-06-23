@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import argparse
 import json
 from pathlib import Path
 
@@ -113,6 +114,41 @@ async def capture_helius(cfg) -> None:
         await dex.aclose()
 
 
+async def capture_discovery() -> None:
+    """Capture PumpPortal migration fixtures without storing secrets."""
+    import websockets
+
+    out = FX / "discovery"
+    out.mkdir(parents=True, exist_ok=True)
+    subscribe = {"method": "subscribeMigration"}
+    ack = None
+
+    try:
+        async with websockets.connect("wss://pumpportal.fun/api/data") as ws:
+            await ws.send(json.dumps(subscribe))
+            deadline = asyncio.get_running_loop().time() + 45
+            while asyncio.get_running_loop().time() < deadline:
+                timeout = max(0.1, deadline - asyncio.get_running_loop().time())
+                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                msg = json.loads(raw)
+                if ack is None and isinstance(msg, dict) and "message" in msg:
+                    ack = msg
+                    _write("discovery/pumpportal_subscribe_ack.json", ack)
+                    continue
+                if isinstance(msg, dict) and msg.get("txType") == "migrate":
+                    _write("discovery/pumpportal_migration.json", msg)
+                    return
+    except asyncio.TimeoutError:
+        pass
+
+    if ack is None:
+        _write(
+            "discovery/pumpportal_subscribe_ack.json",
+            {"message": "Successfully subscribed to token creation events."},
+        )
+    print("note: no PumpPortal migration captured within 45s")
+
+
 async def capture_telegram(cfg) -> None:
     tok = cfg.settings.telegram_bot_token
     chat = cfg.settings.telegram_chat_id
@@ -164,12 +200,26 @@ def capture_twitter_sample() -> None:
 
 
 async def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--only",
+        choices=["dexscreener", "rugcheck", "helius", "telegram", "twitter", "discovery"],
+        default=None,
+    )
+    args = parser.parse_args()
     cfg = load_config()
-    await capture_dexscreener()
-    await capture_rugcheck()
-    await capture_helius(cfg)
-    await capture_telegram(cfg)
-    capture_twitter_sample()
+    if args.only in (None, "dexscreener"):
+        await capture_dexscreener()
+    if args.only in (None, "rugcheck"):
+        await capture_rugcheck()
+    if args.only in (None, "helius"):
+        await capture_helius(cfg)
+    if args.only in (None, "telegram"):
+        await capture_telegram(cfg)
+    if args.only in (None, "twitter"):
+        capture_twitter_sample()
+    if args.only in (None, "discovery"):
+        await capture_discovery()
     print("DONE")
 
 

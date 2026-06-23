@@ -1,0 +1,21 @@
+{
+  "jsonrpc": "2.0",
+  "method": "logsNotification",
+  "params": {
+    "result": {
+      "context": {
+        "slot": 1
+      },
+      "value": {
+        "signature": "x",
+        "err": null,
+        "logs": [
+          "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P invoke [1]",
+          "Program log: Instruction: Buy",
+          "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P success"
+        ]
+      }
+    },
+    "subscription": 1
+  }
+}

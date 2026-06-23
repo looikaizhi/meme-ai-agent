@@ -61,6 +61,7 @@ class Orchestrator:
         paper_trader,
         store: Store,
         cfg: Config,
+        feed=None,
     ) -> None:
         self._scanner = scanner
         self._hardfilter = hardfilter
@@ -70,11 +71,17 @@ class Orchestrator:
         self._paper_trader = paper_trader
         self._store = store
         self._cfg = cfg
+        self._feed = feed
 
     @property
     def paper_trader(self):
         """Read-only access to the injected paper trader."""
         return self._paper_trader
+
+    @property
+    def feed(self):
+        """Background discovery feed, or None when not configured."""
+        return self._feed
 
     def _emit(
         self,

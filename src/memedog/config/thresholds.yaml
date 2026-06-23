@@ -1,7 +1,7 @@
 scanner:
   scan_interval_sec: 30
   chain: solana
-  min_pair_age_min: 20
+  min_pair_age_min: 0
   max_pair_age_min: 360
   prefilter_min_liquidity_usd: 10000
   prefilter_min_volume_5m: 500
@@ -65,3 +65,11 @@ http:
     dexscreener: { max_concurrency: 2, min_interval_sec: 1.0 }
     rugcheck:    { min_interval_sec: 0.5 }
     helius:      { max_concurrency: 2, min_interval_sec: 0.2 }
+discovery:
+  pumpportal_ws_url: "wss://pumpportal.fun/api/data"
+  helius_enabled: true
+  helius_ws_url: "wss://mainnet.helius-rpc.com/?api-key={api_key}"
+  pumpfun_program_id: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+  buffer_ttl_min: 20
+  reconnect_backoff_initial_sec: 1.0
+  reconnect_backoff_max_sec: 30.0

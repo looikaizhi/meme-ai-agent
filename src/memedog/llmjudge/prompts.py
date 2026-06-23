@@ -44,7 +44,7 @@ def _evidence_line(label: str, available: bool, fields: list[tuple[str, str]]) -
 
 
 def _snapshot_evidence(snapshot: TokenSnapshot, score: Score) -> str:
-    """Render the raw on-chain evidence block shared by all three prompts."""
+    """Render raw on-chain evidence first, with rule score as a secondary baseline."""
     s = snapshot.safety
     h = snapshot.holders
     m = snapshot.momentum
@@ -99,19 +99,20 @@ def _snapshot_evidence(snapshot: TokenSnapshot, score: Score) -> str:
     lines = [
         _evidence_line("SAFETY (RugCheck):", s.available, safety_fields),
         _evidence_line("HOLDERS (Helius):", h.available, holder_fields),
-        _evidence_line("MOMENTUM (DexScreen):", m.available, mom_fields),
+        _evidence_line("MOMENTUM (DexScreener):", m.available, mom_fields),
         _evidence_line("SOCIAL:", soc.available, soc_fields),
     ]
 
     dim_map = {d.name: d.raw for d in score.dimensions}
-    pre = (
-        f"[规则预筛分(参考,非最终结论): 总分 {score.total:.1f}/100 | "
+    baseline = (
+        f"[RULE BASELINE / 规则基线(secondary reference, not final truth): "
+        f"total {score.total:.1f}/100 | "
         f"safety {dim_map.get('safety', float('nan')):.0f} "
         f"holders {dim_map.get('holders', float('nan')):.0f} "
         f"momentum {dim_map.get('momentum', float('nan')):.0f} "
         f"social {dim_map.get('social', float('nan')):.0f}]"
     )
-    lines.append(pre)
+    lines.append(baseline)
     return "\n".join(lines)
 
 
@@ -176,13 +177,16 @@ def bull_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
     system_content = (
         "You are a bullish crypto analyst. Identify all positive signals and reasons to BUY. "
         "Cite concrete numbers from the evidence (引用证据中的具体数字). "
-        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty."
+        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty. "
+        "The rule baseline score is secondary metadata, not a conclusion; do not rely on it "
+        "unless the same point is supported by raw fields."
     )
     user_content = (
         f"Analyze token {symbol} (mint: {mint}).\n\n"
         f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
-        "Make the strongest BULLISH case. Each bull point MUST cite a specific field/number above."
+        "Make the strongest BULLISH case. Each bull point MUST cite a specific raw field/number above. "
+        "Do not treat the rule baseline as a buy signal by itself."
     )
     return [
         {"role": "system", "content": system_content},
@@ -200,13 +204,16 @@ def bear_prompt(snapshot: TokenSnapshot, score: Score) -> list[LLMMessage]:
     system_content = (
         "You are a bearish crypto analyst / risk officer. Identify all risks, red flags, and "
         "reasons to AVOID. Cite concrete numbers from the evidence (引用证据中的具体数字). "
-        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty."
+        "Do NOT invent data for DATA MISSING dimensions — treat them as elevated uncertainty. "
+        "The rule baseline score is secondary metadata, not a conclusion; do not rely on it "
+        "unless the same point is supported by raw fields."
     )
     user_content = (
         f"Analyze token {symbol} (mint: {mint}).\n\n"
         f"=== EVIDENCE (raw on-chain data) ===\n{evidence}"
         f"{missing_note}\n\n"
-        "Make the strongest BEARISH case. Each bear point / red flag MUST cite a specific field/number above."
+        "Make the strongest BEARISH case. Each bear point / red flag MUST cite a specific raw field/number above. "
+        "Do not treat the rule baseline as a risk signal by itself."
     )
     return [
         {"role": "system", "content": system_content},
@@ -228,7 +235,8 @@ def judge_prompt(
 
     system_content = (
         "You are an impartial trading signal judge. Reason through a fixed workflow, then "
-        "output a single structured JSON object. No prose outside the JSON."
+        "output a single structured JSON object. No prose outside the JSON. Treat the rule "
+        "baseline as an audit guardrail, not final truth."
     )
     user_content = (
         f"Token: {symbol} (mint: {mint})\n\n"
@@ -236,6 +244,8 @@ def judge_prompt(
         f"{missing_note}\n\n"
         f"=== BULL ARGUMENT ===\n{bull_text}\n\n"
         f"=== BEAR ARGUMENT ===\n{bear_text}\n\n"
+        "The rule baseline is deterministic audit metadata only. It may inform fallback/debugging, "
+        "but your verdict must be grounded in raw evidence and data-backed debate points.\n\n"
         "Reason through these ordered steps before deciding:\n"
         "  1. safety        — hard red lines? (mint/freeze authority not revoked, LP not burned/locked, CRITICAL/HIGH risk)\n"
         "  2. concentration — top10 / largest wallet / dev / sniper healthy or concerning?\n"

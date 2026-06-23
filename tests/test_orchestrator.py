@@ -304,6 +304,24 @@ def test_paper_trader_property_returns_injected_trader(store: Store, cfg: Config
     assert orch._paper_trader is paper_trader
 
 
+def test_orchestrator_accepts_optional_feed(store: Store, cfg: Config) -> None:
+    from memedog.orchestrator import Orchestrator
+
+    sentinel = object()
+    orch = Orchestrator(
+        scanner=FakeScanner([]),
+        hardfilter=FakeHardFilter(pass_mints=set()),
+        enricher=FakeEnricher(),
+        score_engine=FakeScoreEngine(),
+        llm_judge=FakeLLMJudge(),
+        paper_trader=FakePaperTrader(),
+        store=store,
+        cfg=cfg,
+        feed=sentinel,
+    )
+    assert orch.feed is sentinel
+
+
 @pytest.mark.asyncio
 async def test_run_cycle_happy_path(store: Store, cfg: Config) -> None:
     """Scanner returns 2 candidates; hardfilter passes 1; run_cycle returns [signal].

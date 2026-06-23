@@ -144,6 +144,15 @@ def test_evidence_includes_prescore_reference(snapshot_rich, score):
     text = _snapshot_evidence(snapshot_rich, score)
     # the composite pre-score (72.5 from the `score` fixture) appears as reference
     assert "72.5" in text
+    assert "RULE BASELINE" in text
+    assert "not final truth" in text
+
+
+def test_evidence_places_raw_values_before_rule_baseline(snapshot_rich, score):
+    text = _snapshot_evidence(snapshot_rich, score)
+    assert text.index("42,300") < text.index("RULE BASELINE")
+    assert text.index("24.5%") < text.index("RULE BASELINE")
+    assert text.index("trust=78/100") < text.index("RULE BASELINE")
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +194,9 @@ def test_bull_prompt_injects_raw_evidence(snapshot_rich, score):
     all_text = " ".join(m["content"] for m in msgs)
     assert "42,300" in all_text          # raw liquidity present
     assert "top10" in all_text
+    assert "持币人" in all_text
+    assert "5min量" in all_text
+    assert "mint撤权" in all_text
 
 
 def test_bull_prompt_demands_data_citation(snapshot_rich, score):
@@ -193,10 +205,30 @@ def test_bull_prompt_demands_data_citation(snapshot_rich, score):
     assert "cite" in all_text or "引用" in all_text
 
 
+def test_bull_prompt_warns_rule_baseline_is_not_final(snapshot_rich, score):
+    msgs = bull_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs).lower()
+    assert "rule baseline" in all_text
+    assert "not a conclusion" in all_text or "not final truth" in all_text
+    assert "raw field" in all_text
+
+
 def test_bear_prompt_injects_raw_evidence(snapshot_rich, score):
     msgs = bear_prompt(snapshot_rich, score)
     all_text = " ".join(m["content"] for m in msgs)
     assert "42,300" in all_text
+    assert "top10" in all_text
+    assert "持币人" in all_text
+    assert "5min量" in all_text
+    assert "mint撤权" in all_text
+
+
+def test_bear_prompt_warns_rule_baseline_is_not_final(snapshot_rich, score):
+    msgs = bear_prompt(snapshot_rich, score)
+    all_text = " ".join(m["content"] for m in msgs).lower()
+    assert "rule baseline" in all_text
+    assert "not a conclusion" in all_text or "not final truth" in all_text
+    assert "raw field" in all_text
 
 
 # ---------------------------------------------------------------------------
@@ -274,3 +306,20 @@ def test_judge_prompt_injects_raw_evidence(snapshot_rich, score):
     msgs = judge_prompt(snapshot_rich, score, "bull", "bear")
     all_text = " ".join(m["content"] for m in msgs)
     assert "42,300" in all_text
+
+
+def test_judge_prompt_treats_score_as_guardrail_not_verdict(snapshot_rich, score):
+    msgs = judge_prompt(snapshot_rich, score, "bull", "bear")
+    all_text = " ".join(m["content"] for m in msgs).lower()
+    assert "rule baseline" in all_text
+    assert "audit guardrail" in all_text or "audit metadata" in all_text
+    assert "not final truth" in all_text
+    assert "raw evidence" in all_text
+
+
+def test_judge_prompt_places_evidence_before_debate_and_baseline_before_debate(snapshot_rich, score):
+    msgs = judge_prompt(snapshot_rich, score, "bull text", "bear text")
+    user_text = next(m["content"] for m in msgs if m["role"] == "user")
+    assert user_text.index("=== EVIDENCE") < user_text.index("RULE BASELINE")
+    assert user_text.index("RULE BASELINE") < user_text.index("=== BULL ARGUMENT")
+    assert user_text.index("=== BULL ARGUMENT") < user_text.index("=== BEAR ARGUMENT")

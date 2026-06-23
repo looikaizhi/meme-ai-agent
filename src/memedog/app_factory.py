@@ -19,6 +19,11 @@ from memedog.clients.ratelimit import AsyncRateLimiter
 from memedog.clients.rugcheck import RugCheckClient
 from memedog.clients.twitter import TwitterClient
 from memedog.config.settings import Config
+from memedog.discovery.buffer import MintBuffer
+from memedog.discovery.composite import CompositeFeed
+from memedog.discovery.discoverer import MigrationDiscoverer
+from memedog.discovery.helius_feed import HeliusMigrationFeed
+from memedog.discovery.pumpportal import PumpPortalFeed
 from memedog.enricher.enricher import Enricher
 from memedog.hardfilter.hardfilter import HardFilter
 from memedog.llmjudge.judge import LLMJudge
@@ -29,6 +34,37 @@ from memedog.scoring.engine import ScoreEngine
 from memedog.store import Store
 
 logger = logging.getLogger(__name__)
+
+
+def build_discovery(cfg: Config, dex_client: DexScreenerClient | None = None):
+    """Build the realtime discovery feed and Scanner adapter."""
+    discovery = cfg.discovery
+    buffer = MintBuffer(ttl_sec=discovery.buffer_ttl_min * 60)
+    feeds = [
+        PumpPortalFeed(
+            buffer,
+            url=discovery.pumpportal_ws_url,
+            backoff_initial=discovery.reconnect_backoff_initial_sec,
+            backoff_max=discovery.reconnect_backoff_max_sec,
+        )
+    ]
+
+    if discovery.helius_enabled and cfg.settings.helius_api_key:
+        helius_url = discovery.helius_ws_url.format(api_key=cfg.settings.helius_api_key)
+        feeds.append(
+            HeliusMigrationFeed(
+                buffer,
+                url=helius_url,
+                program_id=discovery.pumpfun_program_id,
+                backoff_initial=discovery.reconnect_backoff_initial_sec,
+                backoff_max=discovery.reconnect_backoff_max_sec,
+            )
+        )
+
+    feed = CompositeFeed(feeds, buffer=buffer)
+    dex = dex_client if dex_client is not None else DexScreenerClient()
+    discoverer = MigrationDiscoverer(feed=feed, dex_client=dex)
+    return feed, discoverer
 
 
 def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchestrator:
@@ -82,6 +118,7 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
         )
 
     dex_client = DexScreenerClient(**_http_kwargs("dexscreener"))
+    feed, discoverer = build_discovery(cfg, dex_client=dex_client)
 
     rugcheck_client = RugCheckClient(**_http_kwargs("rugcheck"))
 
@@ -94,7 +131,7 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
     # -----------------------------------------------------------------------
     # Pipeline modules
     # -----------------------------------------------------------------------
-    scanner = Scanner(client=dex_client, cfg=cfg.scanner)
+    scanner = Scanner(client=discoverer, cfg=cfg.scanner)
 
     hardfilter = HardFilter(rugcheck=rugcheck_client, cfg=cfg.hardfilter)
 
@@ -123,6 +160,7 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
         paper_trader=paper_trader,
         store=store,
         cfg=cfg,
+        feed=feed,
     )
 
 
