@@ -20,6 +20,7 @@ from memedog.models import (
     HolderInfo,
     MomentumInfo,
     SocialInfo,
+    WalletInfo,
 )
 from memedog.enricher.providers import (
     fetch_safety,
@@ -31,24 +32,36 @@ from memedog.enricher.providers import (
 logger = logging.getLogger(__name__)
 
 
-def _load_smart_wallets(filepath: str) -> set[str]:
-    """Load smart wallet addresses from a plain-text file (one address per line).
+def _load_smart_wallets(filepath: str) -> dict[str, WalletInfo]:
+    """Load smart wallets as address -> WalletInfo.
 
-    Returns an empty set if the file does not exist or cannot be read.
-    This is intentionally tolerant — a missing file is not an error.
+    Line format: ``address[,label[,tier]]``. Lines starting with ``#`` and
+    blank lines are skipped. Missing/unreadable file -> empty dict (tolerant).
     """
     path = Path(filepath)
     if not path.exists():
-        logger.debug("smart_wallets file not found: %s — using empty set", filepath)
-        return set()
+        logger.debug("smart_wallets file not found: %s — using empty dict", filepath)
+        return {}
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-        wallets = {line.strip() for line in lines if line.strip()}
-        logger.debug("Loaded %d smart wallets from %s", len(wallets), filepath)
-        return wallets
     except OSError as exc:
         logger.warning("Could not read smart_wallets file %s: %s", filepath, exc)
-        return set()
+        return {}
+
+    library: dict[str, WalletInfo] = {}
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p.strip() for p in line.split(",")]
+        address = parts[0]
+        if not address:
+            continue
+        label = parts[1] if len(parts) > 1 and parts[1] else None
+        tier = parts[2] if len(parts) > 2 and parts[2] else None
+        library[address] = WalletInfo(address=address, label=label, tier=tier)
+    logger.debug("Loaded %d smart wallets from %s", len(library), filepath)
+    return library
 
 
 class Enricher:

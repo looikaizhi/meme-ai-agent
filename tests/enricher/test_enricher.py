@@ -283,3 +283,31 @@ class TestEnricherSmartWalletsFile:
 
         snapshot = await enricher.enrich(make_candidate())
         assert snapshot is not None
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — _load_smart_wallets loader upgrade tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_smart_wallets_with_labels(tmp_path):
+    from memedog.enricher.enricher import _load_smart_wallets
+    p = tmp_path / "wallets.txt"
+    p.write_text(
+        "# comment line\n"
+        "AAA,early-BONK-buyer,S\n"
+        "BBB,KOL-wallet,A\n"
+        "CCC\n"            # bare address, no label/tier
+        "\n",             # blank line
+        encoding="utf-8",
+    )
+    lib = _load_smart_wallets(str(p))
+    assert set(lib.keys()) == {"AAA", "BBB", "CCC"}
+    assert lib["AAA"].label == "early-BONK-buyer" and lib["AAA"].tier == "S"
+    assert lib["CCC"].label is None and lib["CCC"].tier is None
+
+
+def test_load_smart_wallets_missing_file_returns_empty():
+    from memedog.enricher.enricher import _load_smart_wallets
+    lib = _load_smart_wallets("/nonexistent/path/wallets.txt")
+    assert lib == {}
