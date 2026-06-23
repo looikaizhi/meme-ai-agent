@@ -120,6 +120,7 @@ _DEMO_RUGCHECK_RAW = {
     "score_normalised": 88,
     "risks": [],
     "markets": [{"lp": {"lpLockedPct": 100}}],
+    # synthetic non-AMM holders; top-10 sum = 20%, max wallet 6% → passes holder rules
     "topHolders": [
         {"address": "demo_h1", "pct": 6.0, "owner": "demo_o1", "insider": False},
         {"address": "demo_h2", "pct": 5.0, "owner": "demo_o2", "insider": False},

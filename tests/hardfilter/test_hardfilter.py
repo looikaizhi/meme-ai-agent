@@ -414,6 +414,11 @@ class TestHardFilterRealFixtures:
       top10_pct≈113.5% (first holder alone holds 71.9%).
 
     Any max_top10_pct < 113 will DROP the concentrated token.
+
+    Note: report_concentrated.json's top holder owner was changed to a
+    synthetic non-AMM wallet so its 71.9% stake counts as real wallet
+    concentration (the original owner was the AMM pool, which is now
+    correctly excluded).
     """
 
     def _make_bonk_cfg(self) -> HardFilterConfig:

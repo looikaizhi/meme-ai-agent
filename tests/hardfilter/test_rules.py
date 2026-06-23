@@ -82,6 +82,20 @@ class TestCheckMomentumPass:
         )
         assert passed is True
 
+    def test_ratio_exactly_at_floor_passes(self, mom_cfg):
+        """ratio == floor (0.2) passes — floor is strict less-than."""
+        from memedog.hardfilter.rules import check_momentum
+
+        passed, _ = check_momentum(
+            liquidity_usd=25_000.0,
+            volume_5m=2_000.0,
+            txns_5m_buys=1,
+            txns_5m_sells=5,  # ratio = 0.2 == floor
+            fdv_usd=100_000.0,
+            cfg=mom_cfg,
+        )
+        assert passed is True
+
 
 # ---------------------------------------------------------------------------
 # check_momentum — failing cases
