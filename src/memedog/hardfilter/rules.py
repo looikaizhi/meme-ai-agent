@@ -37,7 +37,7 @@ def check_momentum(
     Rules (in order):
     1. liquidity_usd >= min_liquidity_usd
     2. volume_5m >= min_volume_5m
-    3. buy/sell ratio = txns_5m_buys / max(txns_5m_sells, 1) >= min_buy_sell_ratio_5m
+    3. extreme floor: ratio = buys / max(sells,1) >= min_buy_sell_ratio_floor
     4. fdv_usd / max(liquidity_usd, epsilon) <= max_fdv_to_liquidity
     """
     # Rule 1: liquidity
@@ -54,12 +54,12 @@ def check_momentum(
             f"momentum:volume_5m={volume_5m} < min={cfg.min_volume_5m}",
         )
 
-    # Rule 3: buy/sell ratio (avoid division by zero)
+    # Rule 3: extreme buy/sell floor (ratio normally feeds scoring, not a hard gate)
     ratio = txns_5m_buys / max(txns_5m_sells, 1)
-    if ratio < cfg.min_buy_sell_ratio_5m:
+    if ratio < cfg.min_buy_sell_ratio_floor:
         return (
             False,
-            f"momentum:buy_sell_ratio={ratio:.4f} < min={cfg.min_buy_sell_ratio_5m}",
+            f"momentum:buy_sell_ratio_floor={ratio:.4f} < floor={cfg.min_buy_sell_ratio_floor}",
         )
 
     # Rule 4: FDV / liquidity

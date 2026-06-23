@@ -24,7 +24,7 @@ def mom_cfg() -> MomentumFilterConfig:
     return MomentumFilterConfig(
         min_liquidity_usd=20_000.0,
         min_volume_5m=1_000.0,
-        min_buy_sell_ratio_5m=1.0,
+        min_buy_sell_ratio_floor=0.2,
         max_fdv_to_liquidity=50.0,
     )
 
@@ -82,6 +82,20 @@ class TestCheckMomentumPass:
         )
         assert passed is True
 
+    def test_ratio_exactly_at_floor_passes(self, mom_cfg):
+        """ratio == floor (0.2) passes — floor is strict less-than."""
+        from memedog.hardfilter.rules import check_momentum
+
+        passed, _ = check_momentum(
+            liquidity_usd=25_000.0,
+            volume_5m=2_000.0,
+            txns_5m_buys=1,
+            txns_5m_sells=5,  # ratio = 0.2 == floor
+            fdv_usd=100_000.0,
+            cfg=mom_cfg,
+        )
+        assert passed is True
+
 
 # ---------------------------------------------------------------------------
 # check_momentum — failing cases
@@ -118,19 +132,34 @@ class TestCheckMomentumFail:
         assert passed is False
         assert "volume" in reason.lower()
 
-    def test_low_buy_sell_ratio_fails_with_reason(self, mom_cfg):
+    def test_moderate_low_ratio_now_passes(self, mom_cfg):
+        """ratio 0.3 (above 0.2 floor) is no longer a hard drop — handled by scoring."""
+        from memedog.hardfilter.rules import check_momentum
+
+        passed, _ = check_momentum(
+            liquidity_usd=25_000.0,
+            volume_5m=2_000.0,
+            txns_5m_buys=3,
+            txns_5m_sells=10,  # ratio = 0.3
+            fdv_usd=100_000.0,
+            cfg=mom_cfg,
+        )
+        assert passed is True
+
+    def test_extreme_low_ratio_fails_floor(self, mom_cfg):
+        """ratio 0.1 (below 0.2 floor) is dropped."""
         from memedog.hardfilter.rules import check_momentum
 
         passed, reason = check_momentum(
             liquidity_usd=25_000.0,
             volume_5m=2_000.0,
-            txns_5m_buys=3,
-            txns_5m_sells=10,
+            txns_5m_buys=1,
+            txns_5m_sells=10,  # ratio = 0.1
             fdv_usd=100_000.0,
             cfg=mom_cfg,
         )
         assert passed is False
-        assert "ratio" in reason.lower() or "buy" in reason.lower()
+        assert "floor" in reason.lower()
 
     def test_high_fdv_ratio_fails_with_reason(self, mom_cfg):
         from memedog.hardfilter.rules import check_momentum

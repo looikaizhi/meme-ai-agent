@@ -65,6 +65,32 @@ RUGGED_REPORT: dict = {
     "creatorBalance": 0,
 }
 
+# A graduated-token report: knownAccounts marks AMM pool accounts; topHolders
+# contains pool accounts (matched by address AND by owner) that MUST be excluded
+# from concentration math.
+AMM_POOL_REPORT: dict = {
+    "mintAuthority": None,
+    "freezeAuthority": None,
+    "score_normalised": 10,
+    "rugged": False,
+    "knownAccounts": {
+        "POOLADDR111": {"name": "Pump Fun AMM", "type": "AMM"},
+        "POOLOWNER22": {"name": "Pump Fun AMM", "type": "AMM"},
+        "CREATORX": {"name": "Creator", "type": "CREATOR"},
+    },
+    "topHolders": [
+        {"address": "POOLADDR111", "pct": 21.0, "owner": "POOLOWNER22", "insider": False},
+        {"address": "VAULT2", "pct": 9.0, "owner": "POOLOWNER22", "insider": False},
+        {"address": "WHALE1", "pct": 12.0, "owner": "WALLET1", "insider": False},
+        {"address": "WHALE2", "pct": 8.0, "owner": "WALLET2", "insider": True},
+        {"address": "WHALE3", "pct": 5.0, "owner": "WALLET3", "insider": False},
+    ],
+    "markets": [{"lp": {"lpLockedPct": 100}}],
+    "token": {"supply": 1_000_000, "decimals": 6, "mintAuthority": None, "freezeAuthority": None},
+    "creator": "CREATORX",
+    "creatorBalance": 0,
+}
+
 
 # ---------------------------------------------------------------------------
 # get_token_report — network layer
@@ -396,3 +422,60 @@ class TestParseReportEdgeCases:
         assert result["sniper_pct"] == pytest.approx(7.0)
         # sniper_pct does NOT include the non-insider holder
         assert result["sniper_pct"] != pytest.approx(10.0)
+
+
+# ---------------------------------------------------------------------------
+# parse_report — AMM/LP pool exclusion tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_report_excludes_amm_by_address_and_owner():
+    """AMM pool accounts (matched via knownAccounts type==AMM, by address OR owner)
+    are excluded before computing top10/max_wallet/sniper."""
+    from memedog.clients.rugcheck import parse_report
+
+    out = parse_report(AMM_POOL_REPORT)
+    # Excluded: POOLADDR111 (address match) and VAULT2 (owner POOLOWNER22 match).
+    # Remaining holders: WHALE1=12, WHALE2=8, WHALE3=5  → top10 = 25.0
+    assert out["top10_pct"] == pytest.approx(25.0)
+    # Largest remaining wallet = WHALE1 = 12.0 (the 21% pool is gone)
+    assert out["max_wallet_pct"] == pytest.approx(12.0)
+    # Sniper = insider holders among the NON-AMM remainder = WHALE2 = 8.0
+    assert out["sniper_pct"] == pytest.approx(8.0)
+
+
+def test_parse_report_without_known_accounts_falls_back():
+    """When knownAccounts is missing, behaviour is the old all-holders sum (no crash)."""
+    from memedog.clients.rugcheck import parse_report
+
+    report = dict(AMM_POOL_REPORT)
+    report.pop("knownAccounts")
+    out = parse_report(report)
+    # No exclusion → top10 = 21+9+12+8+5 = 55.0, max_wallet = 21.0
+    assert out["top10_pct"] == pytest.approx(55.0)
+    assert out["max_wallet_pct"] == pytest.approx(21.0)
+
+
+def test_parse_report_all_holders_are_amm_yields_none():
+    """If every holder is an AMM account, concentration is unassessable → None."""
+    from memedog.clients.rugcheck import parse_report
+
+    report = {
+        "mintAuthority": None,
+        "freezeAuthority": None,
+        "score_normalised": 5,
+        "rugged": False,
+        "knownAccounts": {"P1": {"type": "AMM"}, "P2": {"type": "AMM"}},
+        "topHolders": [
+            {"address": "P1", "pct": 80.0, "owner": "P1", "insider": False},
+            {"address": "x", "pct": 20.0, "owner": "P2", "insider": False},
+        ],
+        "markets": [{"lp": {"lpLockedPct": 100}}],
+        "token": {"supply": 1_000_000, "decimals": 6, "mintAuthority": None, "freezeAuthority": None},
+        "creator": "c",
+        "creatorBalance": 0,
+    }
+    out = parse_report(report)
+    assert out["top10_pct"] is None
+    assert out["max_wallet_pct"] is None
+    assert out["sniper_pct"] is None
