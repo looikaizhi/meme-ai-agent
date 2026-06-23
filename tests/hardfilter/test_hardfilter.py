@@ -411,9 +411,9 @@ class TestHardFilterRealFixtures:
     CONCENTRATED (report_concentrated.json) parsed values:
       mint_authority_revoked=True, freeze_authority_revoked=True,
       lp_burned_or_locked=True,
-      top10_pct≈131.2% (first holder alone holds 71.9%).
+      top10_pct≈113.5% (first holder alone holds 71.9%).
 
-    Any max_top10_pct < 131 will DROP the concentrated token.
+    Any max_top10_pct < 113 will DROP the concentrated token.
     """
 
     def _make_bonk_cfg(self) -> HardFilterConfig:
@@ -440,7 +440,7 @@ class TestHardFilterRealFixtures:
         )
 
     def _make_conc_cfg(self) -> HardFilterConfig:
-        """Standard config; concentrated token's top10 (131%) will fail."""
+        """Standard config; concentrated token's top10 (113.5%) will fail."""
         return HardFilterConfig(
             authority=AuthorityFilterConfig(
                 require_mint_revoked=True,
@@ -448,7 +448,7 @@ class TestHardFilterRealFixtures:
                 require_lp_burned_or_locked=False,  # concentrated token has LP locked; irrelevant
             ),
             holders=HoldersFilterConfig(
-                max_top10_pct=35.0,         # 131% >> 35 → FAIL
+                max_top10_pct=35.0,         # 113.5% >> 35 → FAIL
                 max_single_wallet_pct=20.0,
                 max_dev_pct=10.0,
                 max_sniper_pct=30.0,
@@ -506,7 +506,7 @@ class TestHardFilterRealFixtures:
         assert len(survivors) == 0
         assert len(hf.dropped) == 1
         _, reason = hf.dropped[0]
-        # top10_pct ≈ 131.2 >> 35 → holders check fails
+        # top10_pct ≈ 113.5 >> 35 → holders check fails
         assert "top10" in reason.lower() or "holders" in reason.lower()
 
     async def test_momentum_first_no_rugcheck_when_momentum_fails(self):
@@ -563,7 +563,7 @@ class TestHardFilterRealFixtures:
                 require_lp_burned_or_locked=False,
             ),
             holders=HoldersFilterConfig(
-                max_top10_pct=50.0,         # BONK 45.8% passes; concentrated 131% fails
+                max_top10_pct=50.0,         # BONK 45.8% passes; concentrated 113.5% fails
                 max_single_wallet_pct=80.0,  # high enough to not block on single wallet
                 max_dev_pct=10.0,
                 max_sniper_pct=30.0,
