@@ -16,11 +16,38 @@ import logging
 from typing import Optional
 
 from memedog.clients.base import BaseHTTPClient, DataSourceError
+from memedog.models import WalletInfo
 
 logger = logging.getLogger(__name__)
 
 _HELIUS_RPC_BASE = "https://mainnet.helius-rpc.com"
 _HELIUS_API_BASE = "https://api.helius.xyz"
+
+
+def _summarize_smart_money(transactions, wallet_library: dict) -> dict:
+    """Pure: turn a raw transactions list + labeled wallet library into a
+    consensus summary. No I/O — unit-testable with literal data."""
+    buys = 0
+    matched: dict[str, WalletInfo] = {}
+    if isinstance(transactions, list):
+        for tx in transactions:
+            for transfer in tx.get("tokenTransfers", []):
+                addr = transfer.get("toUserAccount")
+                if addr in wallet_library:
+                    buys += 1
+                    matched[addr] = wallet_library[addr]
+    buyers = list(matched.values())
+    tier_rank = {"S": 3, "A": 2, "B": 1}
+    top_tier = None
+    ranked = [b.tier for b in buyers if b.tier in tier_rank]
+    if ranked:
+        top_tier = max(ranked, key=lambda t: tier_rank[t])
+    return {
+        "buys": buys,
+        "distinct_wallets": len(matched),
+        "buyers": buyers,
+        "top_tier": top_tier,
+    }
 
 
 class HeliusClient(BaseHTTPClient):
@@ -144,3 +171,22 @@ class HeliusClient(BaseHTTPClient):
                         count += 1
 
         return count
+
+    async def analyze_smart_money(self, mint: str, wallet_library: dict) -> dict:
+        """Fetch recent TRANSFER txns and summarize labeled-wallet consensus.
+
+        Empty library -> all-zero, no network. On error -> None (provider marks
+        the sub-source unavailable; dimension survives).
+        """
+        if not wallet_library:
+            return {"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
+        url = (
+            f"{_HELIUS_API_BASE}/v0/addresses/{mint}/transactions"
+            f"?api-key={self._api_key}&type=TRANSFER"
+        )
+        try:
+            transactions = await self.get_json(url)
+        except DataSourceError as exc:
+            logger.warning("analyze_smart_money: fetch failed for %s: %s", mint, exc)
+            return None
+        return _summarize_smart_money(transactions, wallet_library)
