@@ -4,7 +4,9 @@
 
 **Goal:** 给第三层 Enricher 加上聪明钱共识、免费社交元数据、确定性叙事分类(新增第 5 打分维度),并把 Twitter 移出生产路径 —— 让 LLM 拿到更智能的判断依据。
 
-**Architecture:** 数据契约先行(全部默认值,零 call-site 破坏);叶子纯函数(叙事分类器、钱包库加载、Helius 共识、Scanner 采集)各自 TDD;再装配 provider/enricher;最后改 ScoreEngine(加 narrative 维 + 去 twitter 依赖)、config 权重、LLM prompt。全程外部 API mock,不联网。
+**Architecture:** 数据契约先行(全部默认值,零 call-site 破坏);叶子纯函数(叙事分类器、钱包库加载、Helius 共识汇总、社交解析、Scanner 采集、打分)各自 TDD;再装配 provider/enricher;最后改 ScoreEngine、config 权重、LLM prompt。
+
+**测试策略(混合真实,本计划核心约定):** **不用 httpx/respx mock 外部 API。** 网络组件的**解析/汇总逻辑**抽成纯函数,用字面量数据做确定性单测(默认离线套件,无网络);**真实网络调用**全部放进 `tests/live/`(`@pytest.mark.live`,打活存 memecoin BONK/WIF/POPCAT,断言只验结构/范围/健全性,缺 key 自动 skip)。provider 装配用 DI fake 对象(非 HTTP mock)测试组装逻辑。
 
 **Tech Stack:** Python 3.11+ / pydantic v2 / pytest(`pythonpath=["src"]`,直接 `pytest`)。
 
@@ -31,6 +33,7 @@
 | `src/memedog/config/thresholds.yaml` | 阈值/权重 | weights 加 narrative + narrative 段 + enricher lunarcrush |
 | `src/memedog/llmjudge/prompts.py` | LLM 证据 | social 行 + NARRATIVE 行 + workflow |
 | `config/smart_wallets.txt` | 示例钱包库 | 升级带 label/tier |
+| `tests/live/test_live_enricher_phase1.py` | 真实 live 测试 | 打活存 memecoin(BONK/WIF/POPCAT)的真实调用,结构/范围断言 |
 
 ---
 
@@ -430,27 +433,24 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 4: Helius 聪明钱共识
+## Task 4: Helius 聪明钱共识(纯解析单测 + 真实 live)
+
+> **测试策略(本计划已切换为"混合真实")**:HTTP 抓取的**逻辑**抽成纯函数 `_summarize_smart_money(transactions, library)`,用字面量数据做确定性单测(**无 respx/httpx mock**);真实网络调用放进 Task 11 的 `tests/live/`。
 
 **Files:**
 - Modify: `src/memedog/clients/helius.py`
-- Test: `tests/clients/test_helius.py`
+- Test: `tests/clients/test_helius.py`（纯函数,字面量数据,无 mock）
 
 - [ ] **Step 1: 写失败测试**
 
-在 `tests/clients/test_helius.py` 追加（用 respx 风格 mock,与该文件现有测试一致;若现有用别的 mock 方式，沿用之）:
+在 `tests/clients/test_helius.py` 追加(创建文件若无;**不用 respx/httpx mock,只喂字面量**):
 
 ```python
-import pytest
 from memedog.models import WalletInfo
 
 
-@pytest.mark.asyncio
-async def test_analyze_smart_money_counts_distinct_and_tier(respx_mock):
-    import respx, httpx
-    from memedog.clients.helius import HeliusClient
-
-    mint = "MINT123"
+def test_summarize_smart_money_counts_distinct_and_tier():
+    from memedog.clients.helius import _summarize_smart_money
     library = {
         "WALLET_A": WalletInfo(address="WALLET_A", label="kol", tier="A"),
         "WALLET_S": WalletInfo(address="WALLET_S", label="early", tier="S"),
@@ -461,56 +461,72 @@ async def test_analyze_smart_money_counts_distinct_and_tier(respx_mock):
         {"tokenTransfers": [{"toUserAccount": "WALLET_S"}]},
         {"tokenTransfers": [{"toUserAccount": "STRANGER"}]},   # not in library
     ]
-    respx.get(url__regex=rf".*/v0/addresses/{mint}/transactions.*").mock(
-        return_value=httpx.Response(200, json=txs)
-    )
-    async with HeliusClient(api_key="k") as client:
-        result = await client.analyze_smart_money(mint, library)
-
-    assert result["buys"] == 3                 # 3 transfers to known wallets
-    assert result["distinct_wallets"] == 2     # WALLET_A + WALLET_S
-    assert result["top_tier"] == "S"           # best tier among buyers
-    addrs = {b.address for b in result["buyers"]}
-    assert addrs == {"WALLET_A", "WALLET_S"}
+    result = _summarize_smart_money(txs, library)
+    assert result["buys"] == 3
+    assert result["distinct_wallets"] == 2
+    assert result["top_tier"] == "S"
+    assert {b.address for b in result["buyers"]} == {"WALLET_A", "WALLET_S"}
 
 
-@pytest.mark.asyncio
-async def test_analyze_smart_money_empty_library_no_network():
-    from memedog.clients.helius import HeliusClient
-    async with HeliusClient(api_key="k") as client:
-        result = await client.analyze_smart_money("MINT", {})
+def test_summarize_smart_money_no_matches():
+    from memedog.clients.helius import _summarize_smart_money
+    library = {"X": WalletInfo(address="X", tier="B")}
+    result = _summarize_smart_money([{"tokenTransfers": [{"toUserAccount": "Y"}]}], library)
     assert result == {"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
-```
 
-> 若 `tests/clients/test_helius.py` 不存在,创建之并参考 `tests/clients/test_rugcheck.py` 的 respx 用法。`HeliusClient` 支持 `async with`（继承 BaseHTTPClient）。
+
+def test_summarize_smart_money_empty_transactions():
+    from memedog.clients.helius import _summarize_smart_money
+    assert _summarize_smart_money([], {"X": WalletInfo(address="X")})["buys"] == 0
+```
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pytest tests/clients/test_helius.py -k "analyze_smart_money" -v`
-Expected: FAIL（方法不存在）。
+Run: `pytest tests/clients/test_helius.py -k "summarize_smart_money" -v`
+Expected: FAIL（`_summarize_smart_money` 不存在)。
 
 - [ ] **Step 3: 实现**
 
-在 `src/memedog/clients/helius.py` import 处加 `from memedog.models import WalletInfo`。在 `count_smart_money_buys` 之后新增方法:
+在 `src/memedog/clients/helius.py` import 处加 `from memedog.models import WalletInfo`。在模块级(类外)新增纯函数:
 
 ```python
-    async def analyze_smart_money(
-        self, mint: str, wallet_library: dict
-    ) -> dict:
-        """Consensus signal: which labeled wallets recently received this token.
+def _summarize_smart_money(transactions, wallet_library: dict) -> dict:
+    """Pure: turn a raw transactions list + labeled wallet library into a
+    consensus summary. No I/O — unit-testable with literal data."""
+    buys = 0
+    matched: dict[str, WalletInfo] = {}
+    if isinstance(transactions, list):
+        for tx in transactions:
+            for transfer in tx.get("tokenTransfers", []):
+                addr = transfer.get("toUserAccount")
+                if addr in wallet_library:
+                    buys += 1
+                    matched[addr] = wallet_library[addr]
+    buyers = list(matched.values())
+    tier_rank = {"S": 3, "A": 2, "B": 1}
+    top_tier = None
+    ranked = [b.tier for b in buyers if b.tier in tier_rank]
+    if ranked:
+        top_tier = max(ranked, key=lambda t: tier_rank[t])
+    return {
+        "buys": buys,
+        "distinct_wallets": len(matched),
+        "buyers": buyers,
+        "top_tier": top_tier,
+    }
+```
 
-        Returns dict with:
-          buys: int             — transfers whose recipient is in the library
-          distinct_wallets: int — distinct such recipient wallets
-          buyers: list[WalletInfo] — the matched wallets (with label/tier)
-          top_tier: str | None  — best tier among buyers (S>A>B)
+在 `HeliusClient` 内新增方法(薄 I/O 包一层纯函数):
 
-        Empty library -> all-zero result, no network. On error -> None
-        (provider marks the sub-source unavailable, dimension survives).
+```python
+    async def analyze_smart_money(self, mint: str, wallet_library: dict) -> dict:
+        """Fetch recent TRANSFER txns and summarize labeled-wallet consensus.
+
+        Empty library -> all-zero, no network. On error -> None (provider marks
+        the sub-source unavailable; dimension survives).
         """
         if not wallet_library:
             return {"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
-
         url = (
             f"{_HELIUS_API_BASE}/v0/addresses/{mint}/transactions"
             f"?api-key={self._api_key}&type=TRANSFER"
@@ -520,42 +536,19 @@ Expected: FAIL（方法不存在）。
         except DataSourceError as exc:
             logger.warning("analyze_smart_money: fetch failed for %s: %s", mint, exc)
             return None
-
-        buys = 0
-        matched: dict[str, WalletInfo] = {}
-        if isinstance(transactions, list):
-            for tx in transactions:
-                for transfer in tx.get("tokenTransfers", []):
-                    addr = transfer.get("toUserAccount")
-                    if addr in wallet_library:
-                        buys += 1
-                        matched[addr] = wallet_library[addr]
-
-        buyers = list(matched.values())
-        tier_rank = {"S": 3, "A": 2, "B": 1}
-        top_tier = None
-        if buyers:
-            ranked = [b.tier for b in buyers if b.tier in tier_rank]
-            if ranked:
-                top_tier = max(ranked, key=lambda t: tier_rank[t])
-        return {
-            "buys": buys,
-            "distinct_wallets": len(matched),
-            "buyers": buyers,
-            "top_tier": top_tier,
-        }
+        return _summarize_smart_money(transactions, wallet_library)
 ```
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `pytest tests/clients/test_helius.py -k "analyze_smart_money" -v`
-Expected: PASS。
+Run: `pytest tests/clients/test_helius.py -k "summarize_smart_money" -v`
+Expected: PASS。（真实 `analyze_smart_money` 网络行为由 Task 11 的 live 测试覆盖。)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/memedog/clients/helius.py tests/clients/test_helius.py
-git commit -m "feat(helius): analyze_smart_money consensus (distinct wallets, tiers)
+git commit -m "feat(helius): analyze_smart_money consensus via pure summarizer
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -638,37 +631,24 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `src/memedog/config/thresholds.yaml`（enricher 段)
 - Test: `tests/clients/test_lunarcrush.py`
 
+> **测试策略**:galaxy 解析逻辑抽成纯函数 `_parse_galaxy_score(payload)`,字面量数据确定性单测(**无 mock**);真实网络由 Task 11 live 覆盖(无 key 时自动 skip)。
+
 - [ ] **Step 1: 写失败测试**
 
-Create `tests/clients/test_lunarcrush.py`:
+Create `tests/clients/test_lunarcrush.py`(纯函数,字面量,无 mock):
 
 ```python
-import pytest
+def test_parse_galaxy_score_ok():
+    from memedog.clients.lunarcrush import _parse_galaxy_score
+    assert _parse_galaxy_score({"data": {"galaxy_score": 72.5}}) == 72.5
 
 
-@pytest.mark.asyncio
-async def test_get_galaxy_score_parses_value():
-    import respx, httpx
-    from memedog.clients.lunarcrush import LunarCrushClient
-
-    with respx.mock:
-        respx.get(url__regex=r".*lunarcrush.*").mock(
-            return_value=httpx.Response(200, json={"data": {"galaxy_score": 72.5}})
-        )
-        async with LunarCrushClient(api_key="k") as c:
-            score = await c.get_galaxy_score("BONK")
-    assert score == pytest.approx(72.5)
-
-
-@pytest.mark.asyncio
-async def test_get_galaxy_score_returns_none_on_error():
-    import respx, httpx
-    from memedog.clients.lunarcrush import LunarCrushClient
-    with respx.mock:
-        respx.get(url__regex=r".*lunarcrush.*").mock(return_value=httpx.Response(500))
-        async with LunarCrushClient(api_key="k") as c:
-            score = await c.get_galaxy_score("BONK")
-    assert score is None
+def test_parse_galaxy_score_missing_returns_none():
+    from memedog.clients.lunarcrush import _parse_galaxy_score
+    assert _parse_galaxy_score({"data": {}}) is None
+    assert _parse_galaxy_score({}) is None
+    assert _parse_galaxy_score(None) is None
+    assert _parse_galaxy_score({"data": {"galaxy_score": "x"}}) is None
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -698,6 +678,14 @@ logger = logging.getLogger(__name__)
 _LUNARCRUSH_BASE = "https://lunarcrush.com"
 
 
+def _parse_galaxy_score(payload) -> Optional[float]:
+    """Pure: extract galaxy_score from a LunarCrush response. None on anything off."""
+    try:
+        return float((payload.get("data") or {}).get("galaxy_score"))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 class LunarCrushClient(BaseHTTPClient):
     def __init__(self, api_key: str, **kwargs) -> None:
         self._api_key = api_key
@@ -712,10 +700,7 @@ class LunarCrushClient(BaseHTTPClient):
         except DataSourceError as exc:
             logger.warning("LunarCrush galaxy score failed for %s: %s", symbol, exc)
             return None
-        try:
-            return float((data.get("data") or {}).get("galaxy_score"))
-        except (TypeError, ValueError, AttributeError):
-            return None
+        return _parse_galaxy_score(data)
 ```
 
 在 `src/memedog/config/settings.py`:
@@ -1178,11 +1163,11 @@ Expected: 全绿(allow 既有 skip)。若有失败,优先排查:
 - 断言 4 维 / 旧权重的 scoring 测试(改 5 维)。
 逐一修正(改测试以匹配新设计,**不要**弱化断言)。
 
-- [ ] **Step 4: demo 离线端到端**
+- [ ] **Step 4: demo 离线端到端 + 真实 live**
 
-Run: `pytest -q tests/test_app_factory.py -k demo`
-并(可选)`python -m memedog.serve --demo` 手动起一下确认 snapshot 含 narrative。
-Expected: PASS / 看板正常。
+Run: `pytest -q tests/test_app_factory.py -k demo`（离线 demo cycle）
+Run: `pytest -m live tests/live/test_live_enricher_phase1.py -v`（真实联网,确认在真实活币上工作）
+Expected: demo PASS;live PASS(Helius 用例需 key,缺则 skip)。
 
 - [ ] **Step 5: Commit**
 
@@ -1195,9 +1180,133 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
+## Task 11: 真实 live 测试套件(打活存 memecoin)
+
+> 全部真实网络调用,`@pytest.mark.live`,缺 key 自动 skip。断言只验**结构/范围/健全性**(活币数据每分钟在变,不断言精确值)。耐久锚点:BONK / WIF / POPCAT(已用真实调用核实为活跃且有社交);另动态发现新鲜活币补充覆盖。运行:`pytest -m live tests/live/test_live_enricher_phase1.py -v`。
+
+**Files:**
+- Create: `tests/live/test_live_enricher_phase1.py`
+
+- [ ] **Step 1: 写 live 测试**
+
+Create `tests/live/test_live_enricher_phase1.py`:
+
+```python
+"""Live Phase-1 enricher tests — real calls against alive memecoins.
+
+Run:  python -m pytest -m live tests/live/test_live_enricher_phase1.py -v
+Needs HELIUS_API_KEY for the smart-money test (self-skips otherwise).
+DexScreener/narrative tests are keyless.
+"""
+import pytest
+
+from memedog.clients.dexscreener import DexScreenerClient
+from memedog.clients.helius import HeliusClient
+from memedog.config import load_config
+from memedog.enricher.narrative import classify_narrative
+from memedog.models import WalletInfo
+
+pytestmark = pytest.mark.live
+
+# Durable, definitely-alive Solana memecoins (verified to have real socials).
+ALIVE = {
+    "BONK": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "WIF": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+    "POPCAT": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+}
+_KNOWN_PLATFORMS = {"twitter", "telegram", "discord", "website", "tiktok", "instagram", "reddit", "youtube"}
+
+
+async def test_live_dexscreener_socials_real_alive_tokens():
+    """Real DexScreener: at least one durable memecoin exposes social platforms."""
+    dex = DexScreenerClient()
+    try:
+        any_socials = False
+        for sym, mint in ALIVE.items():
+            pairs = await dex.get_token_pairs(mint)
+            sol = [p for p in pairs if p.get("chainId") == "solana"]
+            if not sol:
+                continue
+            info = (sol[0].get("info") or {})
+            platforms = {(s.get("type") or "").lower() for s in (info.get("socials") or [])}
+            if info.get("websites"):
+                platforms.add("website")
+            # every reported platform must be a known kind
+            assert platforms <= _KNOWN_PLATFORMS, f"{sym}: unexpected {platforms}"
+            any_socials = any_socials or bool(platforms)
+        assert any_socials, "expected at least one durable memecoin to have socials"
+    finally:
+        await dex.aclose()
+
+
+async def test_live_narrative_on_real_symbols():
+    """Narrative classifier on real alive symbols — valid category + WIF/POPCAT animal."""
+    valid = {"animal", "ai", "political", "culture", "finance_utility", "unknown"}
+    n_wif = classify_narrative("$WIF", "dogwifhat")
+    assert n_wif.category == "animal" and "wif" in n_wif.meme_collision
+    n_pop = classify_narrative("POPCAT", "Popcat")
+    assert n_pop.category == "animal"
+    n_bonk = classify_narrative("Bonk", "Bonk")
+    assert "bonk" in n_bonk.meme_collision  # collision even without animal keyword
+    assert n_bonk.category in valid
+
+
+async def test_live_analyze_smart_money_shape_on_real_token():
+    """Real Helius: analyze_smart_money returns a sane consensus structure."""
+    cfg = load_config()
+    if not cfg.settings.helius_api_key:
+        pytest.skip("HELIUS_API_KEY not set in .env")
+    helius = HeliusClient(api_key=cfg.settings.helius_api_key)
+    try:
+        # Library uses real BONK-area addresses is unnecessary; we assert SHAPE.
+        library = {"SomeWalletThatMayOrMayNotAppear": WalletInfo(address="SomeWalletThatMayOrMayNotAppear", tier="A")}
+        result = await helius.analyze_smart_money(ALIVE["BONK"], library)
+        if result is None:
+            pytest.skip("Helius transactions endpoint transient failure this run")
+        assert set(result) == {"buys", "distinct_wallets", "buyers", "top_tier"}
+        assert result["distinct_wallets"] <= result["buys"] or result["buys"] == 0
+        assert result["top_tier"] in {"S", "A", "B", None}
+        assert isinstance(result["buyers"], list)
+    finally:
+        await helius.aclose()
+
+
+async def test_live_empty_library_is_zero_no_network():
+    """Empty wallet library must short-circuit to zeros without a network call."""
+    cfg = load_config()
+    helius = HeliusClient(api_key=cfg.settings.helius_api_key or "unused")
+    try:
+        result = await helius.analyze_smart_money(ALIVE["WIF"], {})
+        assert result == {"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
+    finally:
+        await helius.aclose()
+```
+
+- [ ] **Step 2: 跑 live 测试(真实联网)**
+
+Run: `pytest -m live tests/live/test_live_enricher_phase1.py -v`
+Expected: PASS（Helius 用例需 HELIUS_API_KEY；缺则 skip。DexScreener/narrative 用例 keyless 必跑)。
+
+- [ ] **Step 3: 确认默认离线套件不受影响**
+
+Run: `pytest -q`（默认不带 `-m live`,live 用例不计入）
+Expected: 全绿;live 套件被默认排除。
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add tests/live/test_live_enricher_phase1.py
+git commit -m "test(live): real-call Phase 1 enricher tests on alive memecoins
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+```
+
+---
+
 ## Self-Review 记录
 
-- **Spec 覆盖:** §2 目标 A→Task 3/4/7;B→Task 5/6/7;C(叙事)→Task 2/7/8/9;D(去 Twitter)→Task 7/8/10;§3 数据契约→Task 1;§4.C4 打分→Task 8;§4.E prompt→Task 9;§权重→Task 8;§6 测试→各任务 TDD + Task 10 回归。PaperTrader/Phase 2 明确排除,未建任务(符合 spec 非目标)。无遗漏。
+- **Spec 覆盖:** §2 目标 A→Task 3/4/7;B→Task 5/6/7;C(叙事)→Task 2/7/8/9;D(去 Twitter)→Task 7/8/10;§3 数据契约→Task 1;§4.C4 打分→Task 8;§4.E prompt→Task 9;§权重→Task 8;§6 测试→各任务纯逻辑 TDD + Task 10 回归 + Task 11 真实 live。PaperTrader/Phase 2 明确排除,未建任务(符合 spec 非目标)。无遗漏。
+- **测试策略(混合真实):** 默认套件无 httpx/respx mock —— 网络组件解析逻辑抽纯函数(`_summarize_smart_money`/`_parse_galaxy_score`),字面量数据确定性单测;真实网络全部进 Task 11 `tests/live/`(BONK/WIF/POPCAT,已用真实调用核实活跃且有社交,结构/范围断言,缺 key skip);provider 装配用 DI fake(非 HTTP mock)。HELIUS_API_KEY 已设 → Helius live 可跑;LunarCrush 无 key → 其 live 自动 skip(本就可选默认关)。
 - **占位符扫描:** 无 TBD/TODO;每个代码步给出完整代码与确切命令/期望。少量"参考文件已有 fixture 构造"为测试装配说明(指向真实既有模式),非代码占位。
 - **类型一致性:** `WalletInfo(address,label,tier)`、`NarrativeInfo(available,category,matched_keywords,meme_collision,summary)`、`analyze_smart_money -> {buys,distinct_wallets,buyers,top_tier}`、`fetch_social(mint,helius_client,smart_wallets:dict,social_platforms,galaxy_score)`、`score_narrative(info,cfg)`、`ScoringNarrativeConfig(category_scores,meme_collision_bonus)` 在各任务一致;category 集合与 `category_scores` 键一致(animal/ai/political/culture/finance_utility/unknown)。
 - **顺序与绿:** Task 1 数据契约带默认值→不破坏 call-site;Task 3 改加载器后完整 enricher 测试暂红、Task 7 修复(已注明);Task 8 改 scoring 维度/权重并同步更新 thresholds.yaml + scoring 测试,保持 load_config 一致;Task 10 兜底全量回归。
