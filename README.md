@@ -15,7 +15,7 @@
 | **核心思想是什么?** | 一条**漏斗**:数百候选 → 个位数 → 只有这极少数才会触达(昂贵的)LLM。这让多 agent LLM 推理在高频场景下**可负担**。 |
 | **AI 在哪里?** | 一个 provider 无关的 LLM 层,基于真实链上数据跑 **Bull/Bear 双视角辩论 + 裁决终审**,并由确定性的规则打分作为客观锚点。 |
 | **怎么做到便宜?** | 默认 LLM 后端是把 **OpenAI Codex CLI 当子进程调用**,走 ChatGPT 订阅额度 → 近乎零按量成本。一行配置即可切换到 Claude / OpenAI / DeepSeek。 |
-| **是真的能跑吗?** | 是 —— 已对 **DexScreener、RugCheck、Helius、Telegram、Codex** 全部真实联网验证。测试由**真实抓取的 API 响应**驱动,另有可选的 live 真联网测试层。 |
+| **是真的能跑吗?** | 是 —— 已对 **DexScreener、RugCheck、Helius、Telegram、Codex** 全部真实联网验证,并跑通完整端到端 cycle。 |
 | **怎么一眼看到效果?** | **一条命令** `python -m memedog.serve --demo` 同时拉起后端循环 + 实时看板,浏览器里能**实时看到 token 在漏斗里逐阶段流动**(离线、确定性、无需任何 key)。 |
 
 ---
@@ -69,6 +69,16 @@
 
 > 各段由 [`orchestrator.py`](src/memedog/orchestrator.py) 串联(每阶段发**实时事件**到 SQLite 供看板 tail);带类型的数据对象定义在 [`models/`](src/memedog/models/)(见[数据契约](plan/08-data-contracts.md))。一键服务器入口见 [`serve.py`](src/memedog/serve.py)。
 
+### [2] HardFilter 的三类红线(花 LLM 之前的排雷)
+
+> 顺序 fail-fast:先跑**免费、不联网**的动量规则,过了才调 RugCheck 取权限/持币。任一红线不过即丢弃,并记录"是哪条规则、实际值 vs 阈值"供看板回溯。所有阈值集中在 [`thresholds.yaml`](src/memedog/config/thresholds.yaml) 的**调参面板**(含义+建议区间+影响哪一关),改参数不改代码。
+
+| 类别 | 规则(默认阈值) |
+|------|----------------|
+| **A. 合约权限** | mint 权限已放弃 · freeze 权限已放弃 · LP 已烧毁/锁定(任一不满足即丢) |
+| **B. 持币集中度** | Top10 ≤ 35% · 单一钱包 < 20% · 开发者 < 10% · sniper < 30%(**占比已自动剔除 AMM/LP 池**) |
+| **C. 流动性/动量** | 流动性 ≥ $13k · 5min 量 ≥ $300 · FDV/流动性 ≤ 8 · 买卖比兜底 ≥ 0.2(其余交打分) |
+
 ---
 
 ## 3. 为什么这样设计(四条原则)
@@ -88,8 +98,10 @@
 **硬红线**(任一不过即丢弃;所有阈值写在 [`config/thresholds.yaml`](src/memedog/config/thresholds.yaml),**严禁硬编码**):
 
 - **合约权限** —— mint 权限已放弃 · freeze 权限已放弃 · LP 已烧毁/锁定
-- **持币集中度** —— Top10(剔除 LP)≤ 35% · 单一钱包 < 20% · 开发者 < 10% · sniper 抢筹不畸高
-- **流动性 / 动量** —— 流动性 ≥ $20k · 5 分钟量过下限 · 买卖比 ≥ 1 · FDV/流动性比合理
+- **持币集中度** —— Top10(**已剔除 AMM/LP 池**)≤ 35% · 单一钱包 < 20% · 开发者 < 10% · sniper < 30%
+- **流动性 / 动量** —— 流动性 ≥ $13k · 5 分钟量 ≥ $300 · FDV/流动性 ≤ 8 · 买卖比兜底 ≥ 0.2(其余交打分)
+
+> 阈值集中在 [`thresholds.yaml`](src/memedog/config/thresholds.yaml) 的调参面板,均来自对 100 个真实毕业币的实测分布;改参数只动这一个文件。
 
 **四个打分维度**(加权到 0–100):
 
@@ -194,18 +206,7 @@ python scripts/run_playbook_backtest.py
 
 ---
 
-## 7. 真实测试(不是只有 mock)
-
-测试采用**真实数据驱动**,分两层:
-
-- **默认套件 —— `pytest` → 549 个测试,完全离线、确定性。** 每个外部 API 测试都由**真实抓取的 API 响应体**驱动(存于 [`tests/fixtures/`](tests/fixtures/),可用 [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py) 刷新;密钥/PII 绝不入库)。已验证**零外部联网**(`pytest --disable-socket --allow-hosts=127.0.0.1,::1,localhost`)。覆盖智能重试/限流、密钥脱敏、实时事件流、回测指标,以及完整的离线 `--demo` 端到端 cycle。
-- **live 层 —— `pytest -m live` → 9 个测试**,真实命中 DexScreener / RugCheck / Helius / Codex / Telegram,并跑一次完整端到端 cycle。缺对应 key/二进制时各自自动 skip;Telegram 双重闸门(`MEMEDOG_LIVE_TELEGRAM=1`)防止误发。
-
-五个外部集成 + 一次完整的真实 `run_cycle` 均已真实跑通并确认可用。
-
----
-
-## 8. 项目结构
+## 7. 项目结构
 
 ```
 src/memedog/
@@ -223,14 +224,14 @@ src/memedog/
 dashboard/app.py           # Streamlit 看板(实时活动流 + 信号/漏斗/盈亏)
 plan/                      # 各模块设计文档(00 架构 … 08 数据契约)
 docs/superpowers/          # spec + 实现计划
-tests/  +  tests/live/     # 真实 fixture 套件 + 可选 live 层
+tests/                     # 测试套件
 ```
 
 各模块的设计理由见 [`plan/`](plan/) —— 建议从 [`plan/00-architecture.md`](plan/00-architecture.md) 看起。
 
 ---
 
-## 9. 范围与局限(诚实说明)
+## 8. 范围与局限(诚实说明)
 
 - **仅模拟交易** —— 无钱包、无下单。盈亏为虚拟(默认忽略滑点/手续费)。
 - **Solana 优先。** 新币通常高度集中 / 无社交,因此真正的 `BULLISH` 裁决(理应)很少。
