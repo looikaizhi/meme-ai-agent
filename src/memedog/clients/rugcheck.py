@@ -24,9 +24,9 @@ parse_report output keys (always present; missing source fields → None):
   freeze_authority_revoked → freezeAuthority is None
   lp_burned_or_locked      → any market's lp.lpLockedPct >= 90
   top10_pct                → sum of pct for first 10 topHolders (excludes knownAccounts AMM accounts)
-  max_wallet_pct           → max(pct) across all topHolders
+  max_wallet_pct           → max(pct) across topHolders (excludes knownAccounts AMM accounts)
   dev_pct                  → creatorBalance / token.supply * 100
-  sniper_pct               → sum of pct for topHolders where insider=True
+  sniper_pct               → sum of pct for insider=True topHolders (excludes knownAccounts AMM accounts)
   trust_score              → 0–100 SAFETY score = clamp(100 - score_normalised, 0, 100)
   risk_level               → "CRITICAL"/"HIGH"/"MEDIUM"/"LOW" derived from rugged + score_normalised
 """
