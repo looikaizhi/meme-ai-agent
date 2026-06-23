@@ -64,6 +64,7 @@ class EnricherConfig(BaseModel):
     per_provider_timeout_sec: float
     smart_money_wallets_file: str
     twitter_lookback_min: int
+    lunarcrush_enabled: bool = False
 
 
 class ScoringHoldersConfig(BaseModel):
@@ -180,6 +181,7 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
+    lunarcrush_api_key: Optional[str] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     bitget_playbook_access_key: Optional[str] = Field(
