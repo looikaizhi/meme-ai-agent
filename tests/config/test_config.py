@@ -140,6 +140,20 @@ class TestLoadConfig:
             cfg.settings.helius_api_key, str
         )
 
+    def test_playbook_access_key_aliases(self, monkeypatch):
+        from memedog.config.settings import Settings
+
+        monkeypatch.setenv("PLAYBOOK_API_KEY", "playbook-test-key")
+        settings = Settings()
+        assert settings.bitget_playbook_access_key == "playbook-test-key"
+
+    def test_playbook_access_key_supports_bitget_api_key_alias(self, monkeypatch):
+        from memedog.config.settings import Settings
+
+        monkeypatch.setenv("BITGET_API_KEY", "bitget-api-key")
+        settings = Settings()
+        assert settings.bitget_playbook_access_key == "bitget-api-key"
+
     def test_papertrader_values_match_yaml(self):
         """Papertrader numeric values must equal thresholds.yaml."""
         from memedog.config.settings import load_config

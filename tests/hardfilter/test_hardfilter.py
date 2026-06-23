@@ -166,6 +166,7 @@ class TestHardFilterCleanCandidate:
         assert len(survivors) == 1
         assert survivors[0].mint == "GOOD_MINT"
         assert len(hf.dropped) == 0
+        assert hf.rugcheck_reports["GOOD_MINT"]["trust_score"] == 90
 
 
 class TestHardFilterMomentumDrop:
@@ -389,6 +390,7 @@ class TestHardFilterMultipleCandidates:
         # Second call with no candidates → dropped must be empty
         await hf.apply([])
         assert len(hf.dropped) == 0
+        assert hf.rugcheck_reports == {}
 
 
 # ---------------------------------------------------------------------------

@@ -210,15 +210,22 @@ class FakeScanner:
 class FakeHardFilter:
     """Passes only candidates whose mint is in `pass_mints`."""
 
-    def __init__(self, pass_mints: set[str]) -> None:
+    def __init__(self, pass_mints: set[str], reports: dict[str, dict] | None = None) -> None:
         self._pass = pass_mints
+        self._reports = reports or {}
         self.dropped: list[tuple[str, str]] = []
         self.flagged: list[tuple[str, str]] = []
+        self.rugcheck_reports: dict[str, dict] = {}
 
     async def apply(self, candidates: list[TokenCandidate]) -> list[TokenCandidate]:
         survivors = [c for c in candidates if c.mint in self._pass]
         self.dropped = [(c.mint, "test_drop") for c in candidates if c.mint not in self._pass]
         self.flagged = []
+        self.rugcheck_reports = {
+            c.mint: self._reports[c.mint]
+            for c in survivors
+            if c.mint in self._reports
+        }
         return survivors
 
 
@@ -227,8 +234,10 @@ class FakeEnricher:
 
     def __init__(self, raise_for: set[str] | None = None) -> None:
         self._raise_for = raise_for or set()
+        self.calls: list[tuple[TokenCandidate, dict | None]] = []
 
     async def enrich(self, candidate: TokenCandidate, rugcheck_report=None) -> TokenSnapshot:
+        self.calls.append((candidate, rugcheck_report))
         if candidate.mint in self._raise_for:
             raise RuntimeError(f"Fake enricher error for {candidate.mint}")
         return _make_snapshot(candidate)
@@ -376,6 +385,46 @@ async def test_run_cycle_happy_path(store: Store, cfg: Config) -> None:
     called_signal, called_price = paper_trader.on_signal_calls[0]
     assert called_price == pytest.approx(c1.price_usd)
     assert called_signal.mint == "MINT_A"
+
+
+@pytest.mark.asyncio
+async def test_run_cycle_passes_hardfilter_rugcheck_report_to_enricher(
+    store: Store, cfg: Config
+) -> None:
+    """Reuse HardFilter's parsed RugCheck report instead of refetching in Enricher."""
+    from memedog.orchestrator import Orchestrator
+
+    candidate = _make_candidate("MINT_REPORT")
+    report = {
+        "mint_authority_revoked": True,
+        "freeze_authority_revoked": True,
+        "lp_burned_or_locked": True,
+        "trust_score": 91,
+        "risk_level": "LOW",
+    }
+    hardfilter = FakeHardFilter(
+        pass_mints={"MINT_REPORT"},
+        reports={"MINT_REPORT": report},
+    )
+    enricher = FakeEnricher()
+    orch = Orchestrator(
+        scanner=FakeScanner([candidate]),
+        hardfilter=hardfilter,
+        enricher=enricher,
+        score_engine=FakeScoreEngine(),
+        llm_judge=FakeLLMJudge(),
+        paper_trader=FakePaperTrader(),
+        store=store,
+        cfg=cfg,
+    )
+
+    signals = await orch.run_cycle()
+
+    assert len(signals) == 1
+    assert len(enricher.calls) == 1
+    called_candidate, called_report = enricher.calls[0]
+    assert called_candidate.mint == "MINT_REPORT"
+    assert called_report is report
 
 
 @pytest.mark.asyncio
@@ -704,7 +753,7 @@ class TestPipelineEventEmission:
             dropped = []; flagged = []
             async def apply(self, c): return list(c)
         class _Enr:
-            async def enrich(self, c): return snap
+            async def enrich(self, c, rugcheck_report=None): return snap
         class _SE:
             def score(self, s): return score
         class _Judge:
@@ -760,7 +809,7 @@ class TestPipelineEventEmission:
             dropped = []; flagged = []
             async def apply(self, c): return list(c)
         class _Enr:
-            async def enrich(self, c): return snap
+            async def enrich(self, c, rugcheck_report=None): return snap
         class _SE:
             def score(self, s): return score
         class _Judge:

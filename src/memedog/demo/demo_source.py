@@ -105,7 +105,7 @@ def build_demo_snapshot(candidate: TokenCandidate) -> TokenSnapshot:
 class DemoEnricher:
     """Offline enricher: returns build_demo_snapshot (no network)."""
 
-    async def enrich(self, candidate: TokenCandidate) -> TokenSnapshot:
+    async def enrich(self, candidate: TokenCandidate, rugcheck_report=None) -> TokenSnapshot:
         return build_demo_snapshot(candidate)
 
 

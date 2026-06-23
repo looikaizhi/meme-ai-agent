@@ -54,6 +54,7 @@ class HardFilter:
         self._cfg = cfg
         self.dropped: list[tuple[str, str]] = []
         self.flagged: list[tuple[str, str]] = []
+        self.rugcheck_reports: dict[str, dict] = {}
 
     async def apply(self, candidates: list[TokenCandidate]) -> list[TokenCandidate]:
         """Run all three rule families; return survivors.
@@ -64,6 +65,7 @@ class HardFilter:
         """
         self.dropped = []
         self.flagged = []
+        self.rugcheck_reports = {}
         survivors: list[TokenCandidate] = []
 
         for candidate in candidates:
@@ -136,6 +138,7 @@ class HardFilter:
             # ------------------------------------------------------------------
             # Passed all stages — keep
             # ------------------------------------------------------------------
+            self.rugcheck_reports[mint] = report
             survivors.append(candidate)
             logger.debug("HardFilter PASS %s", mint)
 

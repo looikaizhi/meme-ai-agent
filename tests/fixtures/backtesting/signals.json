@@ -1,0 +1,11 @@
+[
+  {
+    "ts": "2026-06-23T00:00:00Z",
+    "mint": "MINT_A",
+    "symbol": "DOG",
+    "signal": "BULLISH",
+    "confidence": 0.8,
+    "price_usd": 1.0,
+    "trace_id": "fixture-1"
+  }
+]

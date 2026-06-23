@@ -7,6 +7,7 @@ dependencies = [
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
     "httpx>=0.27",
+    "python-socks[asyncio]>=2.4",
     "websockets>=12",
     "litellm>=1.40",
     "pyyaml>=6.0",

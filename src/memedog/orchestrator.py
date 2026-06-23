@@ -138,6 +138,7 @@ class Orchestrator:
 
         # Step 3 — Per-survivor pipeline
         signals: list[Signal] = []
+        rugcheck_reports = getattr(self._hardfilter, "rugcheck_reports", {})
 
         for candidate in survivors:
             mint = candidate.mint
@@ -145,7 +146,10 @@ class Orchestrator:
                 # Enrich
                 self._emit("enrich", trace_id=candidate.trace_id, mint=mint,
                            symbol=candidate.symbol, status="start")
-                snap = await self._enricher.enrich(candidate)
+                snap = await self._enricher.enrich(
+                    candidate,
+                    rugcheck_report=rugcheck_reports.get(mint),
+                )
 
                 # Score
                 score = self._score_engine.score(snap)

@@ -178,7 +178,7 @@ def main() -> None:
                     }
                     for p in open_positions
                 ]
-                st.dataframe(pd.DataFrame(rows), use_container_width=True)
+                st.dataframe(pd.DataFrame(rows), width="stretch")
             else:
                 st.info("No open positions.")
 
@@ -210,7 +210,7 @@ def main() -> None:
                 }
                 for t in all_trades
             ]
-            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(rows), width="stretch")
         else:
             st.info("No closed trades yet.")
 
@@ -256,7 +256,7 @@ def main() -> None:
 
             st.subheader("Dropped Candidates (recent cycles)")
             if dropped_rows:
-                st.dataframe(pd.DataFrame(dropped_rows), use_container_width=True)
+                st.dataframe(pd.DataFrame(dropped_rows), width="stretch")
             else:
                 st.info("No candidates were dropped in the last 20 cycles.")
 
@@ -271,7 +271,7 @@ def main() -> None:
 
             if flagged_rows:
                 st.subheader("Flagged Candidates (passed with caveats)")
-                st.dataframe(pd.DataFrame(flagged_rows), use_container_width=True)
+                st.dataframe(pd.DataFrame(flagged_rows), width="stretch")
 
         # ------------------------------------------------------------------
         # Section 4: Config snapshot

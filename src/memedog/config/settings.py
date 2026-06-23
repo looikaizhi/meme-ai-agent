@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_YAML = Path(__file__).parent / "thresholds.yaml"
@@ -182,6 +182,15 @@ class Settings(BaseSettings):
     deepseek_api_key: Optional[str] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+    bitget_playbook_access_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "BITGET_PLAYBOOK_ACCESS_KEY",
+            "PLAYBOOK_API_KEY",
+            "BITGET_API_KEY",
+            "BITGET_ACCESS_KEY",
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,85 @@
+name: memedog-bitget-momentum
+display_name: "MemeDog Bitget Momentum"
+version: "1.0.0"
+description: "Replayable momentum proxy for MemeDog signal research on Bitget DOGE perpetuals"
+long_description: |
+  This Playbook is a deterministic momentum proxy for the MemeDog research
+  pipeline. The live system studies newly graduated meme assets through a
+  funnel of discovery, hard safety checks, enrichment, deterministic scoring,
+  and separate bullish and bearish reasoning. That full process depends on
+  live on-chain events and contextual evidence that cannot be reconstructed
+  perfectly from historical exchange candles. This package therefore focuses
+  on the replayable part of the thesis: whether persistent directional flow in
+  a meme-linked market can produce clean enough trade evidence to justify more
+  expensive live analysis.
+
+  Entry logic is based on trend alignment. The strategy keeps a fast read and
+  a slower read of price action, then waits for the faster read to take clear
+  leadership before opening a long position. This mirrors the scanner's bias
+  toward tokens that already show capital rotation after graduation instead of
+  trying to buy every fresh launch. It is deliberately deterministic and uses
+  only historical bars available to the replay engine.
+
+  Exit logic is also deterministic. When the fast read loses leadership and
+  falls back under the slower read, the strategy closes the open position and
+  returns to watching. The intent is to cut exposure when the directional move
+  no longer looks persistent. It does not use social posts, LLM judgment, or
+  hidden state during replay, so every historical run should be reproducible.
+
+  Tunable parameters control which symbol is replayed, how responsive the
+  trend reads are, how much leverage is declared, and the margin budget used as
+  the strategy denominator. A more responsive configuration can react earlier
+  but will usually whipsaw more often. A slower configuration can avoid some
+  noise but may enter after much of the move has already happened.
+
+  The strategy can underperform badly in sideways markets, liquidation-driven
+  reversals, news shocks, and periods where meme liquidity rotates away from
+  listed derivatives into fresh on-chain launches. Historical backtests do not
+  include every live execution cost, listing gap, or data delay. Treat the
+  hosted result as evidence for the deterministic momentum proxy only, not as
+  proof that the full MemeDog live scanner will be profitable.
+
+market_type: contract
+trading_symbols: ["DOGEUSDT"]
+tags: ["memedog", "momentum", "meme", "doge", "bitget"]
+
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: signal_only
+follow_trade_supported: false
+
+strategy_config:
+  trading_symbols: ["DOGEUSDT"]
+  exchange: bitget
+  fast_period: 10
+  slow_period: 30
+  leverage: 3
+  margin_budget: "100"
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["DOGEUSDT"]
+    options: ["DOGEUSDT", "PEPEUSDT", "WIFUSDT", "SOLUSDT"]
+    aliases:
+      doge: DOGEUSDT
+      pepe: PEPEUSDT
+      wif: WIFUSDT
+      sol: SOLUSDT
+    min_items: 1
+    max_items: 1
+    label: "Trading symbol"
+  leverage:
+    type: integer
+    default: 3
+    min: 1
+    max: 10
+    label: "Leverage"
+  margin_budget:
+    type: string
+    default: "100"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
+
