@@ -138,7 +138,7 @@ def _make_cfg() -> Config:
             momentum=MomentumFilterConfig(
                 min_liquidity_usd=20_000.0,
                 min_volume_5m=1_000.0,
-                min_buy_sell_ratio_5m=1.0,
+                min_buy_sell_ratio_floor=0.2,
                 max_fdv_to_liquidity=50.0,
             ),
             on_rugcheck_failure="drop",

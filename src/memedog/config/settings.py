@@ -49,7 +49,7 @@ class HoldersFilterConfig(BaseModel):
 class MomentumFilterConfig(BaseModel):
     min_liquidity_usd: float
     min_volume_5m: float
-    min_buy_sell_ratio_5m: float
+    min_buy_sell_ratio_floor: float
     max_fdv_to_liquidity: float
 
 
