@@ -11,12 +11,17 @@ class TokenBucket:
         self._capacity = float(capacity)
         self._tokens = float(capacity)
         self._lock = asyncio.Lock()
-        self._last = asyncio.get_event_loop().time()
+        # Clock is read lazily on first acquire() so construction works outside a
+        # running loop (avoids the get_event_loop() deprecation warning on 3.12+).
+        self._last: float | None = None
 
     async def acquire(self) -> None:
         async with self._lock:
+            loop = asyncio.get_running_loop()
+            if self._last is None:
+                self._last = loop.time()
             while True:
-                now = asyncio.get_event_loop().time()
+                now = loop.time()
                 self._tokens = min(
                     self._capacity, self._tokens + (now - self._last) * self._rate
                 )

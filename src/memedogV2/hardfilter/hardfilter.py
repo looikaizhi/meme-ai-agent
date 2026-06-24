@@ -15,6 +15,8 @@ class HardFilter:
     """
 
     def __init__(self, *, cli, cfg: dict, on_failure: str = "pass_flagged") -> None:
+        if on_failure not in ("drop", "pass_flagged"):
+            raise ValueError(f"on_failure must be 'drop' or 'pass_flagged', got {on_failure!r}")
         self._cli = cli
         self._cfg = cfg
         self._on_failure = on_failure
@@ -74,8 +76,8 @@ class HardFilter:
             res.dropped.append(reason)
             return res
 
-        buys = self._val(res.facts, "buys_5m")
-        sells = self._val(res.facts, "sells_5m")
+        buys = R.num(self._val(res.facts, "buys_5m"))
+        sells = R.num(self._val(res.facts, "sells_5m"))
         ratio = (buys / sells) if (buys is not None and sells) else None
         price = R.num(self._val(res.facts, "price_usd"))
         supply = R.num(self._val(res.facts, "circulating_supply"))

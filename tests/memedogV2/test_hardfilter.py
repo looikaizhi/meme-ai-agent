@@ -1,7 +1,7 @@
 import pytest
 from memedogV2.hardfilter.hardfilter import HardFilter
 from memedogV2.models.contracts import HardFilterResult
-from memedogV2.clients.errors import DataSourceError
+from memedogV2.clients.errors import DataSourceError, RateLimitBanned
 
 
 class FakeCli:
@@ -76,3 +76,20 @@ async def test_source_error_pass_flagged():
     hf = HardFilter(cli=BoomCli(), cfg=_cfg(), on_failure="pass_flagged")
     res = await hf.evaluate("CA", "LP")
     assert res.passed is True and res.flagged
+
+
+@pytest.mark.asyncio
+async def test_ratelimit_banned_propagates():
+    # The most safety-critical path: a 429 ban must escape evaluate(), never be
+    # swallowed (the orchestrator suspends until reset_at; retrying extends the ban).
+    class BannedCli:
+        async def token_security(self, ca):
+            raise RateLimitBanned("banned", reset_at=123)
+    hf = HardFilter(cli=BannedCli(), cfg=_cfg(), on_failure="pass_flagged")
+    with pytest.raises(RateLimitBanned):
+        await hf.evaluate("CA", "LP")
+
+
+def test_invalid_on_failure_rejected():
+    with pytest.raises(ValueError):
+        HardFilter(cli=object(), cfg=_cfg(), on_failure="oops")

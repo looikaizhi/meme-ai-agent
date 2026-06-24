@@ -1,6 +1,10 @@
 """Dotted JSON paths into gmgn-cli --raw output. Confirmed against
 tests/memedogV2/fixtures/{security,info}.json during the Phase 0 spike.
-A path that does not exist returns None at read time -> rule degrades open."""
+A path that does not exist returns None at read time -> rule degrades open.
+
+Some entries are mapped for availability but are NOT used as hard gates:
+buy_tax/sell_tax (≈0 on SOL), sniper_hold_rate (we gate on the sniper_wallets
+count instead). They remain here for the LLM evidence layer / future tuning."""
 
 FIELD_MAP = {
     # from `token security --raw`
