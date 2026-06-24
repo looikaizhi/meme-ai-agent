@@ -75,6 +75,9 @@ class FakeHeliusClient:
     async def count_smart_money_buys(self, mint: str, smart_wallets: set) -> int:
         return 0
 
+    async def analyze_smart_money(self, mint: str, library: dict) -> dict:
+        return {"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
+
 
 class FakeTwitterClient:
     async def count_mentions(self, query: str, lookback_min: int) -> dict:
@@ -90,6 +93,12 @@ class SlowHeliusClient:
     async def count_smart_money_buys(self, mint: str, smart_wallets: set) -> int:
         return 0
 
+    async def analyze_smart_money(self, mint: str, library: dict) -> dict:
+        # This is used in fetch_social which is within the social_coro wrapped by
+        # asyncio.wait_for, so a slow get_largest_holders is what causes timeout for
+        # holders; analyze_smart_money here returns fast for the social provider.
+        return {"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
+
 
 class ErrorHeliusClient:
     """Simulates a provider that always raises."""
@@ -97,6 +106,9 @@ class ErrorHeliusClient:
         raise RuntimeError("helius is down")
 
     async def count_smart_money_buys(self, mint: str, smart_wallets: set) -> int:
+        raise RuntimeError("helius is down")
+
+    async def analyze_smart_money(self, mint: str, library: dict) -> dict:
         raise RuntimeError("helius is down")
 
 
@@ -283,3 +295,51 @@ class TestEnricherSmartWalletsFile:
 
         snapshot = await enricher.enrich(make_candidate())
         assert snapshot is not None
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — _load_smart_wallets loader upgrade tests
+# ---------------------------------------------------------------------------
+
+
+class TestEnricherNarrative:
+    async def test_snapshot_narrative_populated(self):
+        """enrich() fills snapshot.narrative with category from symbol/name."""
+        from memedog.enricher.enricher import Enricher
+
+        enricher = Enricher(
+            rugcheck_client=FakeRugCheckClient(),
+            helius_client=FakeHeliusClient(),
+            cfg=make_enricher_cfg(),
+        )
+
+        candidate = make_candidate()  # symbol="DOGE"
+        snapshot = await enricher.enrich(candidate)
+
+        assert snapshot.narrative.available is True
+        assert snapshot.narrative.category is not None
+        # "DOGE" should match the "animal" category (contains "doge" keyword)
+        assert snapshot.narrative.category == "animal"
+
+
+def test_load_smart_wallets_with_labels(tmp_path):
+    from memedog.enricher.enricher import _load_smart_wallets
+    p = tmp_path / "wallets.txt"
+    p.write_text(
+        "# comment line\n"
+        "AAA,early-BONK-buyer,S\n"
+        "BBB,KOL-wallet,A\n"
+        "CCC\n"            # bare address, no label/tier
+        "\n",             # blank line
+        encoding="utf-8",
+    )
+    lib = _load_smart_wallets(str(p))
+    assert set(lib.keys()) == {"AAA", "BBB", "CCC"}
+    assert lib["AAA"].label == "early-BONK-buyer" and lib["AAA"].tier == "S"
+    assert lib["CCC"].label is None and lib["CCC"].tier is None
+
+
+def test_load_smart_wallets_missing_file_returns_empty():
+    from memedog.enricher.enricher import _load_smart_wallets
+    lib = _load_smart_wallets("/nonexistent/path/wallets.txt")
+    assert lib == {}

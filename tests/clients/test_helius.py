@@ -266,3 +266,41 @@ class TestCountSmartMoneyBuys:
                 result = await client.count_smart_money_buys(MINT, {"SomeSmartWallet"})
 
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Task 4: _summarize_smart_money pure-function tests (no mock / no network)
+# ---------------------------------------------------------------------------
+
+from memedog.models import WalletInfo
+
+
+def test_summarize_smart_money_counts_distinct_and_tier():
+    from memedog.clients.helius import _summarize_smart_money
+    library = {
+        "WALLET_A": WalletInfo(address="WALLET_A", label="kol", tier="A"),
+        "WALLET_S": WalletInfo(address="WALLET_S", label="early", tier="S"),
+    }
+    txs = [
+        {"tokenTransfers": [{"toUserAccount": "WALLET_A"}]},
+        {"tokenTransfers": [{"toUserAccount": "WALLET_A"}]},   # same wallet twice
+        {"tokenTransfers": [{"toUserAccount": "WALLET_S"}]},
+        {"tokenTransfers": [{"toUserAccount": "STRANGER"}]},   # not in library
+    ]
+    result = _summarize_smart_money(txs, library)
+    assert result["buys"] == 3
+    assert result["distinct_wallets"] == 2
+    assert result["top_tier"] == "S"
+    assert {b.address for b in result["buyers"]} == {"WALLET_A", "WALLET_S"}
+
+
+def test_summarize_smart_money_no_matches():
+    from memedog.clients.helius import _summarize_smart_money
+    library = {"X": WalletInfo(address="X", tier="B")}
+    result = _summarize_smart_money([{"tokenTransfers": [{"toUserAccount": "Y"}]}], library)
+    assert result == {"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
+
+
+def test_summarize_smart_money_empty_transactions():
+    from memedog.clients.helius import _summarize_smart_money
+    assert _summarize_smart_money([], {"X": WalletInfo(address="X")})["buys"] == 0

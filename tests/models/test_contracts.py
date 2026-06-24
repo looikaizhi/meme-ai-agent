@@ -242,3 +242,92 @@ class TestTradeRecord:
             exit_time=_now(),
         )
         assert tr.exit_reason == "take_profit"
+
+
+def test_wallet_info_defaults():
+    from memedog.models import WalletInfo
+    w = WalletInfo(address="ABC")
+    assert w.address == "ABC"
+    assert w.label is None and w.tier is None
+
+
+def test_narrative_info_defaults():
+    from memedog.models import NarrativeInfo
+    n = NarrativeInfo()
+    assert n.available is True
+    assert n.category is None
+    assert n.matched_keywords == [] and n.meme_collision == []
+    assert n.summary == ""
+
+
+def test_social_info_new_fields_default_none():
+    from memedog.models import SocialInfo
+    s = SocialInfo()
+    assert s.smart_money_distinct_wallets is None
+    assert s.smart_money_buyers is None
+    assert s.smart_money_top_tier is None
+    assert s.has_twitter is None and s.has_telegram is None and s.has_website is None
+    assert s.socials_count is None and s.galaxy_score is None
+
+
+def test_token_candidate_social_platforms_default():
+    from memedog.models import TokenCandidate
+    tc = TokenCandidate(
+        mint="mintABC",
+        pair_address="pairXYZ",
+        symbol="DOG",
+        pair_created_at=_now(),
+        price_usd=0.0001,
+        liquidity_usd=15000.0,
+        fdv_usd=500000.0,
+        volume_5m=800.0,
+        volume_1h=12000.0,
+        txns_5m_buys=40,
+        txns_5m_sells=10,
+        price_change_5m=5.2,
+        trace_id="trace-001",
+    )
+    assert tc.social_platforms == []
+
+
+def test_token_snapshot_narrative_default():
+    from memedog.models import (
+        HolderInfo,
+        MomentumInfo,
+        NarrativeInfo,
+        SafetyInfo,
+        SocialInfo,
+        TokenCandidate,
+        TokenSnapshot,
+    )
+    tc = TokenCandidate(
+        mint="mintABC",
+        pair_address="pairXYZ",
+        symbol="DOG",
+        pair_created_at=_now(),
+        price_usd=0.0001,
+        liquidity_usd=15000.0,
+        fdv_usd=500000.0,
+        volume_5m=800.0,
+        volume_1h=12000.0,
+        txns_5m_buys=40,
+        txns_5m_sells=10,
+        price_change_5m=5.2,
+        trace_id="trace-001",
+    )
+    snap = TokenSnapshot(
+        candidate=tc,
+        safety=SafetyInfo(),
+        holders=HolderInfo(),
+        momentum=MomentumInfo(
+            liquidity_usd=20000.0,
+            volume_5m=1000.0,
+            volume_1h=15000.0,
+            buy_sell_ratio_5m=1.5,
+            fdv_to_liquidity=10.0,
+        ),
+        social=SocialInfo(),
+        enriched_at=_now(),
+    )
+    assert isinstance(snap.narrative, NarrativeInfo)
+    assert snap.narrative.available is True

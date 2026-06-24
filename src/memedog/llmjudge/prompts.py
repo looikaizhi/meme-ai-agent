@@ -89,18 +89,40 @@ def _snapshot_evidence(snapshot: TokenSnapshot, score: Score) -> str:
         mom_fields.append(("FDV/流", _fmt_ratio(m.fdv_to_liquidity)))
 
     soc_fields: list[tuple[str, str]] = []
-    if soc.smart_money_buys is not None:
+    if soc.smart_money_distinct_wallets is not None:
+        soc_fields.append(("聪明钱钱包数", str(soc.smart_money_distinct_wallets)))
+    if soc.smart_money_top_tier is not None:
+        soc_fields.append(("最高级别", str(soc.smart_money_top_tier)))
+    if soc.smart_money_buyers:
+        labels = ", ".join(
+            f"{b.tier or '?'}:{b.label or b.address[:6]}" for b in soc.smart_money_buyers[:5]
+        )
+        soc_fields.append(("买家", labels))
+    elif soc.smart_money_buys is not None:
         soc_fields.append(("聪明钱买入", str(soc.smart_money_buys)))
-    if soc.twitter_mentions_1h is not None:
-        soc_fields.append(("推特提及", str(soc.twitter_mentions_1h)))
-    if soc.twitter_growth is not None:
-        soc_fields.append(("推特增速", _fmt_ratio(soc.twitter_growth)))
+    if soc.socials_count is not None:
+        present = [p for p, ok in (("tw", soc.has_twitter), ("tg", soc.has_telegram), ("web", soc.has_website)) if ok]
+        soc_fields.append(("社交", ("+".join(present) or "无") + f"({soc.socials_count})"))
+    if soc.galaxy_score is not None:
+        soc_fields.append(("galaxy", _fmt_ratio(soc.galaxy_score)))
+
+    nar = snapshot.narrative
+    nar_fields: list[tuple[str, str]] = []
+    if nar.category is not None:
+        nar_fields.append(("category", str(nar.category)))
+    if nar.matched_keywords:
+        nar_fields.append(("命中", ",".join(nar.matched_keywords[:5])))
+    if nar.meme_collision:
+        nar_fields.append(("碰撞", ",".join(nar.meme_collision[:5])))
+    if nar.summary:
+        nar_fields.append(("摘要", nar.summary))
 
     lines = [
         _evidence_line("SAFETY (RugCheck):", s.available, safety_fields),
         _evidence_line("HOLDERS (Helius):", h.available, holder_fields),
         _evidence_line("MOMENTUM (DexScreener):", m.available, mom_fields),
         _evidence_line("SOCIAL:", soc.available, soc_fields),
+        _evidence_line("NARRATIVE / 叙事:", nar.available, nar_fields),
     ]
 
     dim_map = {d.name: d.raw for d in score.dimensions}
@@ -117,13 +139,14 @@ def _snapshot_evidence(snapshot: TokenSnapshot, score: Score) -> str:
 
 
 def _dimension_summary(snapshot: TokenSnapshot, score: Score) -> str:
-    """Render a compact table of all four dimensions with scores and data flags."""
+    """Render a compact table of all five dimensions with scores and data flags."""
     dim_map = {d.name: d for d in score.dimensions}
     avail = {
         "safety": snapshot.safety.available,
         "holders": snapshot.holders.available,
         "momentum": snapshot.momentum.available,
         "social": snapshot.social.available,
+        "narrative": snapshot.narrative.available,
     }
     lines: list[str] = []
     for name, available in avail.items():
@@ -250,7 +273,7 @@ def judge_prompt(
         "  1. safety        — hard red lines? (mint/freeze authority not revoked, LP not burned/locked, CRITICAL/HIGH risk)\n"
         "  2. concentration — top10 / largest wallet / dev / sniper healthy or concerning?\n"
         "  3. momentum      — liquidity floor, 5m-vs-1h volume trend, buy pressure, FDV/liquidity sanity\n"
-        "  4. social        — weigh if available; if DATA MISSING, raise uncertainty (do not invent)\n"
+        "  4. social/narrative — 聪明钱共识强度+钱包级别+社交真实性;叙事(meme 钩子)仅作弱置信修正:无社交/无新闻为中性非看空,叙事只在 safety/holders/momentum 已健康时才提升置信\n"
         "  5. debate        — which bull/bear points are data-backed vs speculative\n"
         "  6. verdict       — map to BULLISH/BEARISH/NEUTRAL; LOWER confidence when key dimensions are missing\n\n"
         "Output ONLY a valid JSON object (no prose, no code fences) with these fields:\n"
