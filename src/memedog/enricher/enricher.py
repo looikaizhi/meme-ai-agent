@@ -152,6 +152,7 @@ class Enricher:
         holders_coro = fetch_holders(
             mint=candidate.mint,
             helius_client=self._helius_client,
+            rugcheck_report=rugcheck_report,  # AMM-excluded concentration (matches HardFilter)
         )
         momentum_coro = fetch_momentum(candidate)
         social_coro = fetch_social(
@@ -160,6 +161,9 @@ class Enricher:
             smart_wallets=smart_wallets,
             social_platforms=social_platforms,
             galaxy_score=galaxy_score,
+            # bound the slow Helius smart-money call below the per-provider deadline
+            # so a timeout never drops the zero-cost social metadata
+            smart_money_timeout=max(1.0, timeout - 1.0),
         )
 
         # Run all providers concurrently; collect results/exceptions

@@ -11,6 +11,7 @@ Parallel failure semantics for fetch_social:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -85,16 +86,40 @@ async def fetch_safety(
 # ---------------------------------------------------------------------------
 
 
-async def fetch_holders(mint: str, helius_client) -> HolderInfo:
-    """Return HolderInfo by querying Helius for the largest token accounts.
+async def fetch_holders(
+    mint: str, helius_client, rugcheck_report: Optional[dict] = None
+) -> HolderInfo:
+    """Return HolderInfo for a token's holder concentration.
 
-    dev_wallet_pct and sniper_pct are not available via getTokenLargestAccounts
-    and will be None. Those fields require a RugCheck report (see fetch_safety).
+    Source consistency: when a parsed RugCheck report is available (HardFilter
+    already fetched it for survivors), the concentration metrics come FROM IT —
+    top10_pct / max_wallet_pct / dev_pct / sniper_pct are AMM-excluded there, so
+    the Enricher's holder view matches the value HardFilter judged on. Helius is
+    used only for the absolute holder_count (a lower bound from the RPC cap).
+
+    Without a report we fall back to Helius `get_largest_holders`, whose top10 /
+    max_wallet INCLUDE the AMM pool (a coarser approximation).
 
     Returns
     -------
     HolderInfo with available=True on success, available=False on any error.
     """
+    if rugcheck_report is not None:
+        holder_count = None
+        try:
+            data = await helius_client.get_largest_holders(mint)
+            holder_count = data.get("holder_count")
+        except Exception as exc:  # noqa: BLE001 — count is best-effort
+            logger.debug("fetch_holders: helius count unavailable for %s: %s", mint, exc)
+        return HolderInfo(
+            available=True,
+            top10_pct=rugcheck_report.get("top10_pct"),
+            max_wallet_pct=rugcheck_report.get("max_wallet_pct"),
+            dev_wallet_pct=rugcheck_report.get("dev_pct"),
+            sniper_pct=rugcheck_report.get("sniper_pct"),
+            holder_count=holder_count,
+        )
+
     try:
         data = await helius_client.get_largest_holders(mint)
         return HolderInfo(
@@ -155,10 +180,15 @@ async def fetch_social(
     smart_wallets: dict,
     social_platforms: list[str],
     galaxy_score: Optional[float] = None,
+    smart_money_timeout: float = 6.0,
 ) -> SocialInfo:
     """Smart-money consensus (Helius) + free social metadata (+ optional galaxy).
 
     available=True if EITHER smart-money consensus OR social metadata is present.
+
+    The (slow) Helius smart-money call is bounded by ``smart_money_timeout`` so a
+    hanging/slow Helius request degrades ONLY the smart-money sub-source — the
+    zero-cost social metadata (has_twitter/socials_count/galaxy) is always returned.
 
     Returns
     -------
@@ -171,15 +201,18 @@ async def fetch_social(
     buys: Optional[int] = None
 
     try:
-        result = await helius_client.analyze_smart_money(mint, smart_wallets)
+        result = await asyncio.wait_for(
+            helius_client.analyze_smart_money(mint, smart_wallets),
+            timeout=smart_money_timeout,
+        )
         if result is not None:
             smart_ok = True
             buys = result.get("buys")
             distinct = result.get("distinct_wallets")
             buyers = result.get("buyers")
             top_tier = result.get("top_tier")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("fetch_social: smart money failed for %s: %s", mint, exc)
+    except Exception as exc:  # noqa: BLE001 — incl. TimeoutError; degrade smart money only
+        logger.warning("fetch_social: smart money failed/slow for %s: %s", mint, exc)
 
     platforms = social_platforms or []
     has_tw = "twitter" in platforms

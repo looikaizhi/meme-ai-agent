@@ -13,6 +13,7 @@ fetch_social semantics (Twitter removed from production — Phase 1):
 """
 from __future__ import annotations
 
+import asyncio
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
@@ -560,3 +561,57 @@ async def test_fetch_narrative_delegates():
     from memedog.enricher.providers import fetch_narrative
     info = await fetch_narrative(symbol="QDOG", name="Quantum Dog")
     assert info.category == "animal"
+
+
+# --- Fix: holders must be AMM-consistent with HardFilter (use RugCheck report) ---
+
+class _FakeHeliusHolders:
+    """Returns AMM-INCLUDED (inflated) concentration like the raw RPC does."""
+    async def get_largest_holders(self, mint):
+        return {"top10_pct": 99.0, "max_wallet_pct": 50.0, "holder_count": 18}
+
+
+@pytest.mark.asyncio
+async def test_fetch_holders_prefers_rugcheck_amm_excluded():
+    """When a RugCheck report is present, holders concentration comes from it
+    (AMM-excluded, consistent with HardFilter) — NOT the inflated Helius value."""
+    from memedog.enricher.providers import fetch_holders
+    report = {"top10_pct": 24.2, "max_wallet_pct": 3.0, "dev_pct": 0.0, "sniper_pct": 1.5}
+    info = await fetch_holders("M", _FakeHeliusHolders(), rugcheck_report=report)
+    assert info.available is True
+    assert info.top10_pct == 24.2          # RugCheck, not Helius 99.0
+    assert info.max_wallet_pct == 3.0       # RugCheck, not Helius 50.0
+    assert info.dev_wallet_pct == 0.0
+    assert info.sniper_pct == 1.5
+    assert info.holder_count == 18          # count still from Helius
+
+
+@pytest.mark.asyncio
+async def test_fetch_holders_falls_back_to_helius_without_report():
+    from memedog.enricher.providers import fetch_holders
+    info = await fetch_holders("M", _FakeHeliusHolders(), rugcheck_report=None)
+    assert info.top10_pct == 99.0           # no report → Helius approximation
+    assert info.holder_count == 18
+
+
+# --- Fix: free social metadata must survive a slow/hanging smart-money call ---
+
+class _SlowHelius:
+    async def analyze_smart_money(self, mint, library):
+        await asyncio.sleep(5)  # simulate a slow Helius transactions call
+        return {"buys": 1, "distinct_wallets": 1, "buyers": [], "top_tier": None}
+
+
+@pytest.mark.asyncio
+async def test_fetch_social_metadata_survives_slow_smart_money():
+    from memedog.enricher.providers import fetch_social
+    info = await fetch_social(
+        mint="M", helius_client=_SlowHelius(),
+        smart_wallets={"A": WalletInfo(address="A")},
+        social_platforms=["twitter", "telegram"], galaxy_score=None,
+        smart_money_timeout=0.1,  # smart money exceeds this → degrades
+    )
+    assert info.available is True           # metadata preserved
+    assert info.has_twitter is True and info.has_telegram is True
+    assert info.socials_count == 2
+    assert info.smart_money_distinct_wallets is None  # smart money timed out
