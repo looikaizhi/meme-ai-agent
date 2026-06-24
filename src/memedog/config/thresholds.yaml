@@ -27,7 +27,6 @@ enricher:
   per_provider_timeout_sec: 8
   smart_money_wallets_file: config/smart_wallets.txt
   twitter_lookback_min: 60
-  lunarcrush_enabled: false   # 可选社交热度;需 LUNARCRUSH_API_KEY,默认关
 scoring:
   weights: { safety: 0.30, holders: 0.25, momentum: 0.30, social: 0.10, narrative: 0.05 }
   holders: { top10_full_score_at: 15, top10_zero_score_at: 50, max_wallet_zero_at: 25, holder_count_full_at: 500, sniper_zero_at: 30 }

@@ -44,7 +44,7 @@
 | 安全 / Rug | RugCheck API(trustScore 0~100、riskLevel) | GoPlus Security API |
 | 持币分布 / 集中度 | Helius RPC / Solana RPC `getTokenLargestAccounts` | Birdeye |
 | 资金 / 流动性 / 动量 | DexScreener API(免费:量/流动性/买卖笔数/FDV) | Birdeye |
-| 聪明钱 / 社交热度 | Helius(标注钱包) + X/Twitter 搜索 | LunarCrush |
+| 聪明钱 / 社交热度 | Helius(标注钱包) + DexScreener 免费社交元数据 | — |
 
 ## 硬规则红线(默认值,可在 config 调整)
 

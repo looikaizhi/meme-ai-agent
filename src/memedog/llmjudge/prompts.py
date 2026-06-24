@@ -103,8 +103,6 @@ def _snapshot_evidence(snapshot: TokenSnapshot, score: Score) -> str:
     if soc.socials_count is not None:
         present = [p for p, ok in (("tw", soc.has_twitter), ("tg", soc.has_telegram), ("web", soc.has_website)) if ok]
         soc_fields.append(("社交", ("+".join(present) or "无") + f"({soc.socials_count})"))
-    if soc.galaxy_score is not None:
-        soc_fields.append(("galaxy", _fmt_ratio(soc.galaxy_score)))
 
     nar = snapshot.narrative
     nar_fields: list[tuple[str, str]] = []

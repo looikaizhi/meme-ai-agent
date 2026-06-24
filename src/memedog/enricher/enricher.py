@@ -81,8 +81,6 @@ class Enricher:
         (Phase 1). Kept as an optional param only for backward-compatible wiring.
     cfg:
         EnricherConfig with per_provider_timeout_sec and smart_money_wallets_file.
-    lunarcrush_client:
-        Optional LunarCrushClient; used only when cfg.lunarcrush_enabled is True.
     """
 
     def __init__(
@@ -91,7 +89,6 @@ class Enricher:
         helius_client,
         twitter_client=None,
         cfg: Optional[EnricherConfig] = None,
-        lunarcrush_client=None,
     ) -> None:
         self._rugcheck_client = rugcheck_client
         self._helius_client = helius_client
@@ -101,7 +98,6 @@ class Enricher:
             smart_money_wallets_file="config/smart_wallets.txt",
             twitter_lookback_min=60,
         )
-        self._lunarcrush = lunarcrush_client
 
     async def enrich(
         self,
@@ -132,17 +128,6 @@ class Enricher:
         # Gather social_platforms from candidate (populated by Scanner)
         social_platforms = list(getattr(candidate, "social_platforms", []) or [])
 
-        # Optionally fetch galaxy score before the main gather (not parallelized with
-        # the other four providers to keep the gather clean)
-        galaxy_score = None
-        if getattr(self._cfg, "lunarcrush_enabled", False) and self._lunarcrush is not None:
-            try:
-                galaxy_score = await asyncio.wait_for(
-                    self._lunarcrush.get_galaxy_score(candidate.symbol), timeout=timeout
-                )
-            except Exception:  # noqa: BLE001 — incl. TimeoutError; degrade to None
-                galaxy_score = None
-
         # Build coroutines for each dimension provider
         safety_coro = fetch_safety(
             mint=candidate.mint,
@@ -162,7 +147,6 @@ class Enricher:
             helius_client=self._helius_client,
             smart_wallets=smart_wallets,
             social_platforms=social_platforms,
-            galaxy_score=galaxy_score,
             # bound the slow Helius smart-money call below the per-provider deadline
             # so a timeout never drops the zero-cost social metadata
             smart_money_timeout=max(1.0, timeout - 1.0),

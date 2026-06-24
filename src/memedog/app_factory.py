@@ -124,13 +124,6 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
     helius_api_key: str = cfg.settings.helius_api_key or ""
     helius_client = HeliusClient(api_key=helius_api_key, **_http_kwargs("helius"))
 
-    lunarcrush_client = None
-    if cfg.enricher.lunarcrush_enabled and cfg.settings.lunarcrush_api_key:
-        from memedog.clients.lunarcrush import LunarCrushClient
-        lunarcrush_client = LunarCrushClient(
-            api_key=cfg.settings.lunarcrush_api_key, **_http_kwargs("lunarcrush")
-        )
-
     # -----------------------------------------------------------------------
     # Pipeline modules
     # -----------------------------------------------------------------------
@@ -142,7 +135,6 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
         rugcheck_client=rugcheck_client,
         helius_client=helius_client,
         cfg=cfg.enricher,
-        lunarcrush_client=lunarcrush_client,
     )
 
     score_engine = ScoreEngine(cfg=cfg.scoring)

@@ -13,7 +13,6 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
 
 _SECRET_ATTRS = (
     "helius_api_key",
-    "lunarcrush_api_key",
     "rugcheck_api_key",
     "twitter_bearer",
     "openai_api_key",

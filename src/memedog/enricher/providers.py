@@ -186,16 +186,15 @@ async def fetch_social(
     helius_client,
     smart_wallets: dict,
     social_platforms: list[str],
-    galaxy_score: Optional[float] = None,
     smart_money_timeout: float = 6.0,
 ) -> SocialInfo:
-    """Smart-money consensus (Helius) + free social metadata (+ optional galaxy).
+    """Smart-money consensus (Helius) + free social metadata.
 
     available=True if EITHER smart-money consensus OR social metadata is present.
 
     The (slow) Helius smart-money call is bounded by ``smart_money_timeout`` so a
     hanging/slow Helius request degrades ONLY the smart-money sub-source — the
-    zero-cost social metadata (has_twitter/socials_count/galaxy) is always returned.
+    zero-cost social metadata (has_twitter/socials_count) is always returned.
 
     Returns
     -------
@@ -226,7 +225,7 @@ async def fetch_social(
     has_tg = "telegram" in platforms
     has_web = "website" in platforms
     socials_count = len(platforms)
-    metadata_present = socials_count > 0 or galaxy_score is not None
+    metadata_present = socials_count > 0
 
     return SocialInfo(
         available=smart_ok or metadata_present,
@@ -238,7 +237,6 @@ async def fetch_social(
         has_telegram=has_tg if platforms else None,
         has_website=has_web if platforms else None,
         socials_count=socials_count if platforms else None,
-        galaxy_score=galaxy_score,
     )
 
 
