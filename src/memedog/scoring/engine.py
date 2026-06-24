@@ -13,10 +13,10 @@ Weight renormalization algorithm:
 
 Edge cases:
 - If total_w == 0 (e.g. missing_dimension_weight_factor=0 and all dims
-  unavailable), fall back to equal weights (0.25 each) so the pipeline
-  never crashes ("降级而非崩溃").
-- cfg.weights must contain all four keys {safety, holders, momentum, social};
-  missing keys raise ValueError at construction time.
+  unavailable), fall back to equal weights (0.20 each for five dims) so the
+  pipeline never crashes ("降级而非崩溃").
+- cfg.weights must contain all five keys {safety, holders, momentum, social,
+  narrative}; missing keys raise ValueError at construction time.
 """
 from __future__ import annotations
 
@@ -28,11 +28,12 @@ from memedog.models.snapshot import TokenSnapshot
 from memedog.scoring.dimensions import (
     score_holders,
     score_momentum,
+    score_narrative,
     score_safety,
     score_social,
 )
 
-_REQUIRED_WEIGHT_KEYS = {"safety", "holders", "momentum", "social"}
+_REQUIRED_WEIGHT_KEYS = {"safety", "holders", "momentum", "social", "narrative"}
 _logger = logging.getLogger(__name__)
 
 
@@ -40,7 +41,7 @@ class ScoreEngine:
     """Compute a composite Score from a TokenSnapshot."""
 
     def __init__(self, cfg: ScoringConfig) -> None:
-        # Fix 2: validate that all four weight keys are present at construction time
+        # Fix 2: validate that all five weight keys are present at construction time
         missing = _REQUIRED_WEIGHT_KEYS - set(cfg.weights.keys())
         if missing:
             raise ValueError(f"cfg.weights missing keys: {missing}")
@@ -55,6 +56,7 @@ class ScoreEngine:
             (score_holders(snapshot.holders, cfg), snapshot.holders.available),
             (score_momentum(snapshot.momentum, cfg), snapshot.momentum.available),
             (score_social(snapshot.social, cfg), snapshot.social.available),
+            (score_narrative(snapshot.narrative, cfg), snapshot.narrative.available),
         ]
 
         # 2. Compute effective weights (reduce if unavailable)
@@ -71,7 +73,7 @@ class ScoreEngine:
         if total_w == 0.0:
             _logger.warning(
                 "ScoreEngine: total effective weight is 0 — falling back to equal "
-                "weights (0.25 each). This happens when missing_dimension_weight_factor=0 "
+                "weights (1/n each). This happens when missing_dimension_weight_factor=0 "
                 "and all dimensions are unavailable."
             )
             n = len(effective_weights)

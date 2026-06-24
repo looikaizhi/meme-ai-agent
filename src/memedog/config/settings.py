@@ -88,11 +88,19 @@ class ScoringSocialConfig(BaseModel):
     twitter_growth_zero_at: float
 
 
+class ScoringNarrativeConfig(BaseModel):
+    """Configurable scoring table for the narrative dimension scorer."""
+
+    category_scores: dict[str, float]
+    meme_collision_bonus: float
+
+
 class ScoringConfig(BaseModel):
     weights: dict[str, float]
     holders: ScoringHoldersConfig
     momentum: ScoringMomentumConfig
     social: ScoringSocialConfig
+    narrative: ScoringNarrativeConfig
     missing_dimension_weight_factor: float
     neutral_score: float
 

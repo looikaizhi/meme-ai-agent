@@ -4,7 +4,13 @@ from __future__ import annotations
 import pytest
 
 from memedog.models import SafetyInfo, HolderInfo, MomentumInfo, SocialInfo
-from memedog.config.settings import ScoringConfig, ScoringHoldersConfig, ScoringMomentumConfig, ScoringSocialConfig
+from memedog.config.settings import (
+    ScoringConfig,
+    ScoringHoldersConfig,
+    ScoringMomentumConfig,
+    ScoringSocialConfig,
+    ScoringNarrativeConfig,
+)
 from memedog.scoring.dimensions import (
     lerp_score,
     score_safety,
@@ -21,7 +27,7 @@ from memedog.scoring.dimensions import (
 @pytest.fixture
 def scoring_cfg() -> ScoringConfig:
     return ScoringConfig(
-        weights={"safety": 0.35, "holders": 0.25, "momentum": 0.25, "social": 0.15},
+        weights={"safety": 0.30, "holders": 0.25, "momentum": 0.30, "social": 0.10, "narrative": 0.05},
         holders=ScoringHoldersConfig(
             top10_full_score_at=15,
             top10_zero_score_at=50,
@@ -37,6 +43,10 @@ def scoring_cfg() -> ScoringConfig:
             smart_money_full_at=10,
             twitter_growth_full_at=2.0,
             twitter_growth_zero_at=-1.0,
+        ),
+        narrative=ScoringNarrativeConfig(
+            category_scores={"animal": 70, "ai": 65, "political": 60, "culture": 55, "finance_utility": 35, "unknown": 40},
+            meme_collision_bonus=10,
         ),
         missing_dimension_weight_factor=0.5,
         neutral_score=50.0,
@@ -432,6 +442,7 @@ class TestScoreSocialConfigurableThresholds:
                 twitter_growth_full_at=scoring_cfg.social.twitter_growth_full_at,
                 twitter_growth_zero_at=scoring_cfg.social.twitter_growth_zero_at,
             ),
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -439,8 +450,9 @@ class TestScoreSocialConfigurableThresholds:
         ds = score_social(info, custom_cfg)
         assert ds.raw == pytest.approx(100.0)
 
-    def test_twitter_growth_thresholds_from_config(self, scoring_cfg):
-        """With twitter_growth_full_at=1.0 and zero_at=0.0, growth=0.5 → 50."""
+    def test_twitter_growth_no_longer_affects_social_score(self, scoring_cfg):
+        """Task 8: twitter_growth is removed from score_social; only smart_money_buys counts.
+        Providing only twitter_growth (smart_money_buys=None) falls to neutral (no metrics)."""
         from memedog.config.settings import ScoringSocialConfig
         custom_cfg = ScoringConfig(
             weights=scoring_cfg.weights,
@@ -451,12 +463,14 @@ class TestScoreSocialConfigurableThresholds:
                 twitter_growth_full_at=1.0,
                 twitter_growth_zero_at=0.0,
             ),
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
             neutral_score=scoring_cfg.neutral_score,
         )
+        # twitter_growth=0.5 is ignored; smart_money_buys=None → no scoreable metric → neutral
         info = SocialInfo(available=True, smart_money_buys=None, twitter_growth=0.5)
         ds = score_social(info, custom_cfg)
-        assert ds.raw == pytest.approx(50.0)
+        assert ds.raw == pytest.approx(custom_cfg.neutral_score)
 
     def test_default_thresholds_match_yaml(self, scoring_cfg):
         """The fixture's social config values must match thresholds.yaml."""
@@ -517,3 +531,30 @@ class TestScoreMomentumNoDeadClamp:
                             buy_sell_ratio_5m=0.5)
         ds = score_momentum(info, scoring_cfg)
         assert ds.raw >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Task 8: score_narrative tests
+# ---------------------------------------------------------------------------
+
+def test_score_narrative_category_and_collision(scoring_cfg):
+    from memedog.scoring.dimensions import score_narrative
+    from memedog.models import NarrativeInfo
+    d = score_narrative(NarrativeInfo(category="animal", meme_collision=["bonk"]), scoring_cfg)
+    assert d.name == "narrative"
+    assert d.raw == pytest.approx(80.0)   # 70 base + 10 collision bonus
+
+
+def test_score_narrative_unknown_neutral(scoring_cfg):
+    from memedog.scoring.dimensions import score_narrative
+    from memedog.models import NarrativeInfo
+    d = score_narrative(NarrativeInfo(category="unknown"), scoring_cfg)
+    assert d.raw == pytest.approx(40.0)
+
+
+def test_score_social_ignores_twitter_growth(scoring_cfg):
+    from memedog.scoring.dimensions import score_social
+    from memedog.models import SocialInfo
+    a = score_social(SocialInfo(available=True, smart_money_buys=5, twitter_growth=2.0), scoring_cfg)
+    b = score_social(SocialInfo(available=True, smart_money_buys=5, twitter_growth=None), scoring_cfg)
+    assert a.raw == pytest.approx(b.raw)

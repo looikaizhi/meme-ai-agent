@@ -14,14 +14,16 @@ Heuristics documented:
   max_wallet uses lerp from 0→100 (lower→better, full at 0, zero at max_wallet_zero_at).
 - Momentum: average liquidity and volume_5m lerps; buy_sell_ratio > 1 adds a
   gentle bonus: min(10, (ratio-1)*10); all clamped to [0,100].
-- Social: smart_money_buys mapped via lerp(full_at=10, zero_at=0); twitter_growth
-  mapped via lerp(full_at=2.0, zero_at=-1.0); average of available metrics.
+- Social: smart_money_buys mapped via lerp(full_at=cfg.social.smart_money_full_at,
+  zero_at=0); average of available metrics. (twitter_growth removed in Task 8.)
+- Narrative: deterministic table lookup by category (from cfg.narrative.category_scores)
+  plus optional meme_collision bonus; clamped to [0,100].
 """
 from __future__ import annotations
 
 from typing import Optional
 
-from memedog.models.snapshot import HolderInfo, MomentumInfo, SafetyInfo, SocialInfo
+from memedog.models.snapshot import HolderInfo, MomentumInfo, NarrativeInfo, SafetyInfo, SocialInfo
 from memedog.models.score import DimensionScore
 
 
@@ -193,11 +195,12 @@ def score_social(info: SocialInfo, cfg) -> DimensionScore:
 
     Sub-metrics:
     - smart_money_buys: lerp(full_at=cfg.social.smart_money_full_at, zero_at=0)
-    - twitter_growth: lerp(full_at=cfg.social.twitter_growth_full_at,
-                           zero_at=cfg.social.twitter_growth_zero_at)
 
     Fix 4: thresholds are now read from cfg.social (ScoringSocialConfig) rather
     than being hardcoded, honouring the project's no-hardcoding rule.
+
+    Task 8: twitter_growth lerp removed — social scoring now relies solely on
+    smart_money_buys signal which is more reliable and already enriched.
 
     Average of available metrics. All None → neutral + note.
     """
@@ -217,17 +220,33 @@ def score_social(info: SocialInfo, cfg) -> DimensionScore:
         )
         scores.append(s)
 
-    if info.twitter_growth is not None:
-        s = lerp_score(
-            info.twitter_growth,
-            full_at=cfg.social.twitter_growth_full_at,
-            zero_at=cfg.social.twitter_growth_zero_at,
-        )
-        scores.append(s)
-
     if not scores:
         notes.append("数据缺失 (no social metrics available)")
         return DimensionScore(name="social", raw=cfg.neutral_score, weight=0.0, weighted=0.0, notes=notes)
 
     raw = max(0.0, min(100.0, sum(scores) / len(scores)))
     return DimensionScore(name="social", raw=raw, weight=0.0, weighted=0.0, notes=notes)
+
+
+def score_narrative(info: NarrativeInfo, cfg) -> DimensionScore:
+    """Deterministic narrative score: category base (+ collision bonus), clamp [0,100].
+
+    Sub-metrics:
+    - category: lookup in cfg.narrative.category_scores (falls back to 'unknown' entry
+      or cfg.neutral_score if 'unknown' also missing).
+    - meme_collision: if non-empty, add cfg.narrative.meme_collision_bonus.
+
+    Task 8: new 5th dimension added to ScoreEngine.
+    """
+    notes: list[str] = []
+    if not info.available:
+        notes.append("数据缺失 (narrative unavailable)")
+        return DimensionScore(name="narrative", raw=cfg.neutral_score, weight=0.0, weighted=0.0, notes=notes)
+    category = info.category or "unknown"
+    base = cfg.narrative.category_scores.get(
+        category, cfg.narrative.category_scores.get("unknown", cfg.neutral_score)
+    )
+    if info.meme_collision:
+        base += cfg.narrative.meme_collision_bonus
+    raw = max(0.0, min(100.0, float(base)))
+    return DimensionScore(name="narrative", raw=raw, weight=0.0, weighted=0.0, notes=notes)
