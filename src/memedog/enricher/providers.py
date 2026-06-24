@@ -5,10 +5,9 @@ Each provider function fetches one *Info dimension and is independently degradab
   - NEVER re-raises to the caller.
 
 Parallel failure semantics for fetch_social:
-  - Twitter fails but smart money ok  → available=True (partial result)
-  - Smart money fails but twitter ok  → available=True (partial result)
-  - Both fail                         → available=False
-  - Both succeed                      → available=True (full result)
+  - smart money fails but social metadata ok → available=True (partial result)
+  - Both fail                                → available=False
+  - Both succeed                             → available=True (full result)
 """
 from __future__ import annotations
 
@@ -21,8 +20,10 @@ from memedog.models import (
     HolderInfo,
     MomentumInfo,
     SocialInfo,
+    NarrativeInfo,
 )
 from memedog.clients.rugcheck import parse_report
+from memedog.enricher.narrative import classify_narrative
 
 logger = logging.getLogger(__name__)
 
@@ -149,18 +150,15 @@ async def fetch_momentum(candidate: TokenCandidate) -> MomentumInfo:
 
 
 async def fetch_social(
-    symbol: str,
     mint: str,
     helius_client,
-    twitter_client,
-    smart_wallets: set[str],
-    lookback_min: int,
+    smart_wallets: dict,
+    social_platforms: list[str],
+    galaxy_score: Optional[float] = None,
 ) -> SocialInfo:
-    """Combine smart-money buys (Helius) and Twitter mentions into SocialInfo.
+    """Smart-money consensus (Helius) + free social metadata (+ optional galaxy).
 
-    Partial failure semantics (documented at module level):
-      - Either sub-source failing alone keeps available=True with its fields as None.
-      - Both sub-sources failing → available=False.
+    available=True if EITHER smart-money consensus OR social metadata is present.
 
     Returns
     -------
@@ -168,39 +166,47 @@ async def fetch_social(
       available=True  if at least one sub-source succeeded
       available=False if both sub-sources failed
     """
-    smart_money_buys: Optional[int] = None
-    twitter_mentions_1h: Optional[int] = None
-    twitter_growth: Optional[float] = None
+    smart_ok = False
+    distinct = buyers = top_tier = None
+    buys: Optional[int] = None
 
-    smart_money_ok = False
-    twitter_ok = False
-
-    # --- smart money buys (helius, best-effort) ---
     try:
-        smart_money_buys = await helius_client.count_smart_money_buys(mint, smart_wallets)
-        smart_money_ok = smart_money_buys is not None
+        result = await helius_client.analyze_smart_money(mint, smart_wallets)
+        if result is not None:
+            smart_ok = True
+            buys = result.get("buys")
+            distinct = result.get("distinct_wallets")
+            buyers = result.get("buyers")
+            top_tier = result.get("top_tier")
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "fetch_social: smart money query failed for mint %s: %s", mint, exc
-        )
+        logger.warning("fetch_social: smart money failed for %s: %s", mint, exc)
 
-    # --- twitter mentions ---
-    try:
-        twitter_result = await twitter_client.count_mentions(symbol, lookback_min)
-        twitter_mentions_1h = twitter_result.get("mentions_1h")
-        twitter_growth = twitter_result.get("growth")
-        twitter_ok = twitter_mentions_1h is not None
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "fetch_social: twitter query failed for symbol %s: %s", symbol, exc
-        )
-
-    # Determine overall availability: at least one sub-source must have succeeded
-    available = smart_money_ok or twitter_ok
+    platforms = social_platforms or []
+    has_tw = "twitter" in platforms
+    has_tg = "telegram" in platforms
+    has_web = "website" in platforms
+    socials_count = len(platforms)
+    metadata_present = socials_count > 0 or galaxy_score is not None
 
     return SocialInfo(
-        available=available,
-        smart_money_buys=smart_money_buys if smart_money_ok else None,
-        twitter_mentions_1h=twitter_mentions_1h,
-        twitter_growth=twitter_growth,
+        available=smart_ok or metadata_present,
+        smart_money_buys=buys if smart_ok else None,
+        smart_money_distinct_wallets=distinct if smart_ok else None,
+        smart_money_buyers=buyers if smart_ok else None,
+        smart_money_top_tier=top_tier if smart_ok else None,
+        has_twitter=has_tw if platforms else None,
+        has_telegram=has_tg if platforms else None,
+        has_website=has_web if platforms else None,
+        socials_count=socials_count if platforms else None,
+        galaxy_score=galaxy_score,
     )
+
+
+# ---------------------------------------------------------------------------
+# fetch_narrative
+# ---------------------------------------------------------------------------
+
+
+async def fetch_narrative(symbol: str, name: str) -> NarrativeInfo:
+    """Deterministic narrative classification (never raises)."""
+    return classify_narrative(symbol, name)

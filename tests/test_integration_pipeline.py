@@ -151,6 +151,9 @@ class FakeHeliusClient:
     async def count_smart_money_buys(self, mint: str, smart_wallets: set) -> int:
         return 3
 
+    async def analyze_smart_money(self, mint: str, library: dict) -> dict:
+        return {"buys": 3, "distinct_wallets": 1, "buyers": [], "top_tier": None}
+
 
 class FakeTwitterClient:
     async def count_mentions(self, query: str, lookback_min: int) -> dict:

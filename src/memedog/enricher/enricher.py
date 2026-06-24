@@ -20,6 +20,7 @@ from memedog.models import (
     HolderInfo,
     MomentumInfo,
     SocialInfo,
+    NarrativeInfo,
     WalletInfo,
 )
 from memedog.enricher.providers import (
@@ -27,6 +28,7 @@ from memedog.enricher.providers import (
     fetch_holders,
     fetch_momentum,
     fetch_social,
+    fetch_narrative,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,23 +76,31 @@ class Enricher:
     helius_client:
         HeliusClient instance used for holders and smart-money sub-sources.
     twitter_client:
-        TwitterClient instance used for the social twitter sub-source.
+        Deprecated/unused — Twitter was removed from the production social path
+        (Phase 1). Kept as an optional param only for backward-compatible wiring.
     cfg:
-        EnricherConfig with per_provider_timeout_sec, smart_money_wallets_file,
-        and twitter_lookback_min.
+        EnricherConfig with per_provider_timeout_sec and smart_money_wallets_file.
+    lunarcrush_client:
+        Optional LunarCrushClient; used only when cfg.lunarcrush_enabled is True.
     """
 
     def __init__(
         self,
         rugcheck_client,
         helius_client,
-        twitter_client,
-        cfg: EnricherConfig,
+        twitter_client=None,
+        cfg: Optional[EnricherConfig] = None,
+        lunarcrush_client=None,
     ) -> None:
         self._rugcheck_client = rugcheck_client
         self._helius_client = helius_client
-        self._twitter_client = twitter_client
-        self._cfg = cfg
+        self._twitter_client = twitter_client  # kept for backward-compat; not used
+        self._cfg = cfg or EnricherConfig(
+            per_provider_timeout_sec=10.0,
+            smart_money_wallets_file="config/smart_wallets.txt",
+            twitter_lookback_min=60,
+        )
+        self._lunarcrush = lunarcrush_client
 
     async def enrich(
         self,
@@ -118,6 +128,20 @@ class Enricher:
         timeout = self._cfg.per_provider_timeout_sec
         smart_wallets = _load_smart_wallets(self._cfg.smart_money_wallets_file)
 
+        # Gather social_platforms from candidate (populated by Scanner)
+        social_platforms = list(getattr(candidate, "social_platforms", []) or [])
+
+        # Optionally fetch galaxy score before the main gather (not parallelized with
+        # the other four providers to keep the gather clean)
+        galaxy_score = None
+        if getattr(self._cfg, "lunarcrush_enabled", False) and self._lunarcrush is not None:
+            try:
+                galaxy_score = await asyncio.wait_for(
+                    self._lunarcrush.get_galaxy_score(candidate.symbol), timeout=timeout
+                )
+            except Exception:  # noqa: BLE001 — incl. TimeoutError; degrade to None
+                galaxy_score = None
+
         # Build coroutines for each dimension provider
         safety_coro = fetch_safety(
             mint=candidate.mint,
@@ -130,12 +154,11 @@ class Enricher:
         )
         momentum_coro = fetch_momentum(candidate)
         social_coro = fetch_social(
-            symbol=candidate.symbol,
             mint=candidate.mint,
             helius_client=self._helius_client,
-            twitter_client=self._twitter_client,
             smart_wallets=smart_wallets,
-            lookback_min=self._cfg.twitter_lookback_min,
+            social_platforms=social_platforms,
+            galaxy_score=galaxy_score,
         )
 
         # Run all providers concurrently; collect results/exceptions
@@ -166,11 +189,21 @@ class Enricher:
             logger.warning("social provider failed: %s", social)
             social = SocialInfo(available=False)
 
+        # Narrative classification — deterministic, never raises, fast
+        try:
+            narrative_info = await fetch_narrative(
+                symbol=candidate.symbol,
+                name=getattr(candidate, "name", "") or candidate.symbol,
+            )
+        except Exception:  # noqa: BLE001
+            narrative_info = NarrativeInfo(available=False)
+
         return TokenSnapshot(
             candidate=candidate,
             safety=safety,
             holders=holders,
             momentum=momentum,
             social=social,
+            narrative=narrative_info,
             enriched_at=datetime.now(timezone.utc),
         )

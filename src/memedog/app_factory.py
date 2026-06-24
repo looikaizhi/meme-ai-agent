@@ -128,6 +128,13 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
     twitter_bearer: Optional[str] = cfg.settings.twitter_bearer
     twitter_client = TwitterClient(bearer_token=twitter_bearer, **_http_kwargs("twitter"))
 
+    lunarcrush_client = None
+    if cfg.enricher.lunarcrush_enabled and cfg.settings.lunarcrush_api_key:
+        from memedog.clients.lunarcrush import LunarCrushClient
+        lunarcrush_client = LunarCrushClient(
+            api_key=cfg.settings.lunarcrush_api_key, **_http_kwargs("lunarcrush")
+        )
+
     # -----------------------------------------------------------------------
     # Pipeline modules
     # -----------------------------------------------------------------------
@@ -140,6 +147,7 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
         helius_client=helius_client,
         twitter_client=twitter_client,
         cfg=cfg.enricher,
+        lunarcrush_client=lunarcrush_client,
     )
 
     score_engine = ScoreEngine(cfg=cfg.scoring)
