@@ -1,8 +1,9 @@
-"""Enricher: parallel orchestration of the 4 dimension providers.
+"""Enricher: orchestration of the dimension providers into a TokenSnapshot.
 
-Each provider runs concurrently under asyncio.gather with an individual timeout.
-If a provider times out or raises, its dimension is substituted with
-*Info(available=False). enrich() NEVER raises to the caller.
+The four network dimensions (safety/holders/momentum/social) run concurrently
+under asyncio.gather with an individual timeout; if one times out or raises, its
+dimension is substituted with *Info(available=False). The deterministic narrative
+dimension is derived separately (no I/O). enrich() NEVER raises to the caller.
 """
 from __future__ import annotations
 

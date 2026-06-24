@@ -2,7 +2,9 @@
 
 Provides:
   - get_largest_holders: fetches top token holder accounts via getTokenLargestAccounts
-  - count_smart_money_buys: best-effort query for recent token transfers by known wallets
+  - analyze_smart_money: labeled-wallet consensus (distinct buyers, tiers) for a mint
+  - count_smart_money_buys: legacy best-effort transfer count (kept for tests; superseded
+    by analyze_smart_money in the production social path)
 
 LIMITATION: getTokenLargestAccounts returns at most 20 accounts (Solana RPC cap).
 Therefore:
