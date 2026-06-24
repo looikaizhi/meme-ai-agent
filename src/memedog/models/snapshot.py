@@ -65,7 +65,6 @@ class SocialInfo(BaseModel):
     has_telegram: Optional[bool] = None
     has_website: Optional[bool] = None
     socials_count: Optional[int] = None
-    galaxy_score: Optional[float] = None
 
 
 class TokenSnapshot(BaseModel):

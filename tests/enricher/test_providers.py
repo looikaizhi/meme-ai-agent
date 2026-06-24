@@ -356,7 +356,6 @@ class TestFetchSocial:
             helius_client=mock_helius,
             smart_wallets={"wallet1": WalletInfo(address="wallet1")},
             social_platforms=[],
-            galaxy_score=None,
         )
 
         assert result.available is True
@@ -376,7 +375,6 @@ class TestFetchSocial:
             helius_client=mock_helius,
             smart_wallets={},
             social_platforms=["twitter", "telegram"],
-            galaxy_score=None,
         )
 
         assert result.available is True
@@ -399,7 +397,6 @@ class TestFetchSocial:
             helius_client=mock_helius,
             smart_wallets={},
             social_platforms=["twitter"],
-            galaxy_score=None,
         )
 
         assert result.available is True
@@ -421,7 +418,6 @@ class TestFetchSocial:
             helius_client=mock_helius,
             smart_wallets={},
             social_platforms=[],
-            galaxy_score=None,
         )
 
         assert result.available is False
@@ -440,7 +436,6 @@ class TestFetchSocial:
             helius_client=mock_helius,
             smart_wallets={},
             social_platforms=[],
-            galaxy_score=None,
         )
 
         assert result.available is True
@@ -458,7 +453,6 @@ class TestFetchSocial:
             helius_client=mock_helius,
             smart_wallets={"wallet1": None},
             social_platforms=[],
-            galaxy_score=None,
         )
 
         assert result.available is False
@@ -478,7 +472,6 @@ class TestFetchSocial:
             helius_client=mock_helius,
             smart_wallets={"wallet1": WalletInfo(address="wallet1")},
             social_platforms=["twitter"],
-            galaxy_score=None,
         )
 
         assert result.available is True
@@ -511,7 +504,6 @@ async def test_fetch_social_consensus_and_metadata():
         mint="M", helius_client=helius,
         smart_wallets={"A": WalletInfo(address="A")},
         social_platforms=["twitter", "telegram", "website"],
-        galaxy_score=None,
     )
     assert info.available is True
     assert info.smart_money_buys == 3
@@ -527,7 +519,7 @@ async def test_fetch_social_smart_money_none_still_available_via_metadata():
     helius = _FakeHelius(None)
     info = await fetch_social(
         mint="M", helius_client=helius, smart_wallets={"A": WalletInfo(address="A")},
-        social_platforms=["twitter"], galaxy_score=None,
+        social_platforms=["twitter"],
     )
     assert info.available is True
     assert info.has_twitter is True
@@ -538,22 +530,8 @@ async def test_fetch_social_smart_money_none_still_available_via_metadata():
 async def test_fetch_social_no_smart_no_socials_unavailable():
     from memedog.enricher.providers import fetch_social
     helius = _FakeHelius(None)
-    info = await fetch_social(mint="M", helius_client=helius, smart_wallets={}, social_platforms=[], galaxy_score=None)
+    info = await fetch_social(mint="M", helius_client=helius, smart_wallets={}, social_platforms=[])
     assert info.available is False
-
-
-@pytest.mark.asyncio
-async def test_fetch_social_galaxy_alone_makes_available():
-    """galaxy_score is the sole signal (no smart money, no socials) → available=True."""
-    from memedog.enricher.providers import fetch_social
-    helius = _FakeHelius(None)
-    info = await fetch_social(
-        mint="M", helius_client=helius, smart_wallets={},
-        social_platforms=[], galaxy_score=61.0,
-    )
-    assert info.available is True
-    assert info.galaxy_score == 61.0
-    assert info.socials_count is None
 
 
 @pytest.mark.asyncio
@@ -629,7 +607,7 @@ async def test_fetch_social_metadata_survives_slow_smart_money():
     info = await fetch_social(
         mint="M", helius_client=_SlowHelius(),
         smart_wallets={"A": WalletInfo(address="A")},
-        social_platforms=["twitter", "telegram"], galaxy_score=None,
+        social_platforms=["twitter", "telegram"],
         smart_money_timeout=0.1,  # smart money exceeds this → degrades
     )
     assert info.available is True           # metadata preserved

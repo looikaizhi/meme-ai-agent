@@ -267,7 +267,7 @@ def test_social_info_new_fields_default_none():
     assert s.smart_money_buyers is None
     assert s.smart_money_top_tier is None
     assert s.has_twitter is None and s.has_telegram is None and s.has_website is None
-    assert s.socials_count is None and s.galaxy_score is None
+    assert s.socials_count is None
 
 
 def test_token_candidate_social_platforms_default():
