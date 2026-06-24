@@ -594,6 +594,27 @@ async def test_fetch_holders_falls_back_to_helius_without_report():
     assert info.holder_count == 18
 
 
+class _SlowCountHelius:
+    async def get_largest_holders(self, mint):
+        await asyncio.sleep(5)              # simulate a hanging RPC
+        return {"holder_count": 20}
+
+
+@pytest.mark.asyncio
+async def test_fetch_holders_concentration_survives_slow_helius_count():
+    """With a RugCheck report, a slow/hanging Helius holder_count call must NOT
+    lose the (already-available, AMM-excluded) concentration data."""
+    from memedog.enricher.providers import fetch_holders
+    report = {"top10_pct": 24.2, "max_wallet_pct": 3.0, "dev_pct": 0.0, "sniper_pct": 1.5}
+    info = await fetch_holders(
+        "M", _SlowCountHelius(), rugcheck_report=report, holder_count_timeout=0.1
+    )
+    assert info.available is True
+    assert info.top10_pct == 24.2          # concentration preserved
+    assert info.max_wallet_pct == 3.0
+    assert info.holder_count is None        # count timed out → None, not fatal
+
+
 # --- Fix: free social metadata must survive a slow/hanging smart-money call ---
 
 class _SlowHelius:

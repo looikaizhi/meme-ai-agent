@@ -87,7 +87,10 @@ async def fetch_safety(
 
 
 async def fetch_holders(
-    mint: str, helius_client, rugcheck_report: Optional[dict] = None
+    mint: str,
+    helius_client,
+    rugcheck_report: Optional[dict] = None,
+    holder_count_timeout: float = 6.0,
 ) -> HolderInfo:
     """Return HolderInfo for a token's holder concentration.
 
@@ -107,9 +110,13 @@ async def fetch_holders(
     if rugcheck_report is not None:
         holder_count = None
         try:
-            data = await helius_client.get_largest_holders(mint)
+            # holder_count is best-effort; bound the call so a hang can't discard
+            # the (already-available) AMM-excluded concentration from the report
+            data = await asyncio.wait_for(
+                helius_client.get_largest_holders(mint), timeout=holder_count_timeout
+            )
             holder_count = data.get("holder_count")
-        except Exception as exc:  # noqa: BLE001 — count is best-effort
+        except Exception as exc:  # noqa: BLE001 — incl. TimeoutError; count best-effort
             logger.debug("fetch_holders: helius count unavailable for %s: %s", mint, exc)
         return HolderInfo(
             available=True,

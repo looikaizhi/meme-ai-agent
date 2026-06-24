@@ -153,6 +153,8 @@ class Enricher:
             mint=candidate.mint,
             helius_client=self._helius_client,
             rugcheck_report=rugcheck_report,  # AMM-excluded concentration (matches HardFilter)
+            # bound the best-effort holder_count fetch so a hang can't drop the dimension
+            holder_count_timeout=max(1.0, timeout - 1.0),
         )
         momentum_coro = fetch_momentum(candidate)
         social_coro = fetch_social(
