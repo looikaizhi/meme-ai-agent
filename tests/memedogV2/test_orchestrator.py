@@ -62,3 +62,15 @@ async def test_process_swallows_ratelimit_ban():
     orch = V2Orchestrator(hardfilter=BannedHF(), audit=FakeAudit())
     sig = await orch.process("CA", "LP")
     assert sig is None
+
+
+@pytest.mark.asyncio
+async def test_process_swallows_generic_hardfilter_error():
+    class BoomHF:
+        async def evaluate(self, ca, lp, trace_id=""):
+            raise RuntimeError("network down")
+    audit = FakeAudit()
+    orch = V2Orchestrator(hardfilter=BoomHF(), audit=audit)
+    sig = await orch.process("CA", "LP")
+    assert sig is None
+    assert audit.audited == []   # audit never reached

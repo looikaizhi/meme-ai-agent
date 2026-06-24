@@ -2,9 +2,9 @@ gmgn:
   rate_limit_rps: 1.0          # conservative; gmgn token routes allow ~20/s but 1/s is safe
   cache_ttl_sec: 60
   max_evidence_calls: 5
-  intake_drain_rps: 0.5
+  intake_drain_rps: 0.5        # placeholder — Telegram intake drain pacing (not wired yet)
   on_failure: pass_flagged     # drop | pass_flagged
-  on_429: suspend_until_reset
+  on_429: suspend_until_reset  # placeholder — GmgnCli raises RateLimitBanned; orchestrator skips
 hardfilter:
   max_top10_rate: 0.35         # 0-1 fraction (35%)
   max_creator_rate: 0.10

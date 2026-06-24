@@ -14,6 +14,7 @@ Runner = Callable[[list[str]], Awaitable[tuple[int, str, str]]]
 async def _subprocess_runner(args: list[str]) -> tuple[int, str, str]:
     proc = await asyncio.create_subprocess_exec(
         "gmgn-cli", *args,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     out, err = await proc.communicate()

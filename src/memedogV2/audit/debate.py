@@ -36,7 +36,11 @@ class BullBearJudge:
     def _evidence_text(b: EvidenceBundle) -> str:
         body = b.model_dump()
         missing = body.pop("missing", [])
-        return (f"Evidence for {b.ca_address}: {json.dumps(body)}\n"
+        body.pop("ca_address", None)
+        # Only surface dimensions we actually fetched — None values are noise that
+        # wastes prompt tokens; the "missing" list already records what's absent.
+        present = {k: v for k, v in body.items() if v is not None}
+        return (f"Evidence for {b.ca_address}: {json.dumps(present)}\n"
                 f"Missing/unfetched dimensions: {missing}")
 
     async def decide(self, bundle: EvidenceBundle) -> Signal:
