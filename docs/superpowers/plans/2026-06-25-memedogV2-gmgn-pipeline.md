@@ -12,6 +12,68 @@
 
 ---
 
+## ⚠️ Task 0 Spike Corrections (AUTHORITATIVE — override any conflicting task body below)
+
+The Phase 0 spike ran for real (GREEN, 2026-06-25) against `gmgn-cli@1.4.7` + `codex exec` (gpt-5.5). Fixtures live in `tests/memedogV2/fixtures/{security,info,pool}.json`. These corrections supersede the originally-guessed details in Tasks 4–8:
+
+1. **HardFilter calls 2 commands, not 3:** `token security` then `token info`. `token info` already contains concentration, manipulation, momentum, dev, and smart-money fields; `token security` only adds authorities + burn/lock + tax. **Drop `token pool` from HardFilter** (and from the security→pool→info ordering — it's now security→info).
+
+2. **Real `FIELD_MAP`** (`src/memedogV2/hardfilter/fieldmap.py`) — paths confirmed against fixtures:
+```python
+FIELD_MAP = {
+    # from `token security --raw`
+    "renounced_mint":     "renounced_mint",            # bool
+    "renounced_freeze":   "renounced_freeze_account",  # bool
+    "honeypot":           "honeypot",                  # int 0/1 (SOL has no is_honeypot)
+    "burn_status":        "burn_status",               # "burn" == LP burned
+    "lp_locked":          "lock_summary.is_locked",    # bool
+    "buy_tax":            "buy_tax",                    # str number
+    "sell_tax":           "sell_tax",                  # str number
+    # from `token info --raw`
+    "top10_rate":         "stat.top_10_holder_rate",        # str 0-1 fraction
+    "creator_hold_rate":  "stat.creator_hold_rate",         # str 0-1
+    "dev_team_hold_rate": "stat.dev_team_hold_rate",        # str 0-1
+    "fresh_wallet_rate":  "stat.fresh_wallet_rate",         # str 0-1
+    "sniper_hold_rate":   "stat.top70_sniper_hold_rate",    # str 0-1
+    "bundler_rate":       "stat.top_bundler_trader_percentage",  # str 0-1
+    "sniper_wallets":     "wallet_tags_stat.sniper_wallets",     # int
+    "liquidity_usd":      "liquidity",                 # str number (top-level in info)
+    "price_usd":          "price.price",               # str number
+    "circulating_supply": "circulating_supply",        # str number
+    "volume_5m":          "price.volume_5m",           # str number
+    "buys_5m":            "price.buys_5m",             # int
+    "sells_5m":           "price.sells_5m",            # int
+    # LLM evidence only (NOT hard gates)
+    "dev_created_count":  "dev.creator_open_count",          # int
+    "dev_ath_mc":         "dev.ath_token_info.ath_mc",       # str (may be "")
+    "smart_wallets":      "wallet_tags_stat.smart_wallets",  # int
+    "renowned_wallets":   "wallet_tags_stat.renowned_wallets",  # int
+}
+```
+
+3. **Coercion is mandatory.** Add to `rules.py`:
+```python
+def num(v):
+    """Coerce gmgn string/number to float; '' or None -> None."""
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+```
+All rate fields are **0–1 fractions** — compare against fractional thresholds (e.g. `max_top10_rate: 0.35`, not `35`). Rename the hardfilter config keys accordingly: `max_top10_rate`, `max_single/creator_rate`, `max_dev_rate`, `max_fresh_wallet_rate`, `max_sniper_hold_rate`, `max_bundler_rate`, and keep count/usd keys (`max_sniper_wallets`, `min_liquidity_usd`, `min_volume_5m`, `min_buy_sell_ratio_5m`, `max_fdv_to_liquidity`). FDV = `num(price_usd) * num(circulating_supply)`.
+
+4. **Authorities/LP from real fields:** fail if `renounced_mint is False` or `renounced_freeze is False` or `honeypot == 1`. LP-safe if `burn_status == "burn"` OR `lp_locked is True` (fail only when both indicate unsafe and at least one value is present).
+
+5. **No dev hard-gate.** There is no graduation-rate field in gmgn data. **Remove `check_dev_track`** from HardFilter; dev track record (`dev_created_count`, `dev_ath_mc`) goes into the `EvidenceBundle` for the LLM only.
+
+6. **codex/`--output-schema` is strict (Tasks 6–8):** every schema object MUST have `"additionalProperties": false` AND list every property in `"required"`. For optional fields use nullable types `{"type": ["integer", "null"]}` but still include them in `required`. Also: `codex exec` MUST be invoked with stdin closed (`< /dev/null` / `asyncio.subprocess.DEVNULL`) or it hangs reading stdin. The working invocation is in `scripts/spike_codex_gmgn.sh` (`--dangerously-bypass-approvals-and-sandbox --skip-git-repo-check --output-schema <f> -o <out>`).
+
+7. **Test fixtures over invented JSON:** Tasks 4/5 tests should load `tests/memedogV2/fixtures/{security,info}.json` for the "clean token" path (USDC: passes authorities, near-zero concentration, high liquidity) rather than hand-built dicts, plus small synthetic dicts for the failing red-line cases.
+
+---
+
 ## File Structure
 
 ```
