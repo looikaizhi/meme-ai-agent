@@ -63,6 +63,7 @@ class HardFilterConfig(BaseModel):
 class EnricherConfig(BaseModel):
     per_provider_timeout_sec: float
     smart_money_wallets_file: str
+    # deprecated: Twitter removed from production path (Phase 1); kept for config compat
     twitter_lookback_min: int
     lunarcrush_enabled: bool = False
 
@@ -185,6 +186,7 @@ class Settings(BaseSettings):
 
     helius_api_key: Optional[str] = None
     rugcheck_api_key: Optional[str] = None
+    # deprecated: Twitter removed from production path (Phase 1); kept for config compat
     twitter_bearer: Optional[str] = None
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
