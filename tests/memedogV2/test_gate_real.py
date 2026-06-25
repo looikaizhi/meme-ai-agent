@@ -27,8 +27,8 @@ USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 # liq ~$57k, top10 27%). Fresh memecoins die fast, so the pipeline gate below
 # SKIPS LOUDLY if this token no longer passes (rather than failing) — refresh it
 # via the trending screener when it dies.
-PINNED_CA = "AvxFBjWydMYWD7C8pHzSkGxNYAFWr7aNBbAKm84bpump"
-PINNED_LP = "CQCiNRqQohijwKxxHvTzbpFvpKNFWtxeshCWqEJrgbEB"
+PINNED_CA = "5UUH9RTDiSpq6HKS6bp4NdU9PNJpXRXuiw6ShBTBhgH2"   # "TROLL", passed 2026-06-25
+PINNED_LP = "4w2cysotX6czaUGmmWg13hDpY4QEMG2CzeKYEQyK9Ama"
 
 
 def _need(cond, why):
