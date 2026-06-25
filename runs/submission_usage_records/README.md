@@ -18,5 +18,3 @@ Files:
 These records are intended to satisfy the requirement:
 
 > Verifiable usage record, such as test record, real user usage record, or sample input + output file.
-
-The raw SQLite database remains `memedog.db` at the project root. Do not submit `.env`, API keys, Telegram session files, or private credentials.
