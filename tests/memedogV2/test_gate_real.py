@@ -62,9 +62,15 @@ async def test_gate_resilience_real_fallback():
         "gmgn": GmgnSource(cli=cli, max_retries=2),
     })
     resolved = await resolver.resolve(USDC, "LP")          # must NOT raise
+    # rugcheck failure is always recorded (the point of the test)
+    assert any(a.tool == "rugcheck" and a.exit_status != 0 for a in resolved.attempts)
+    # if real gmgn (the fallback) was itself transiently down, we cannot assert the
+    # fallback value — skip loudly rather than flake. The no-crash guarantee above
+    # (resolve did not raise) is the part that always holds.
+    gmgn_ok = any(a.tool == "gmgn" and a.exit_status == 0 for a in resolved.attempts)
+    _need(gmgn_ok, "real gmgn transiently unavailable — cannot assert fallback value")
     assert resolved.facts.mint_revoked is True             # came from gmgn fallback
     assert resolved.sources.get("mint_revoked") == "gmgn"
-    assert any(a.tool == "rugcheck" and a.exit_status != 0 for a in resolved.attempts)
 
 
 @pytest.mark.asyncio
