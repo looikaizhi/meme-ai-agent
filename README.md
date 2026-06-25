@@ -206,6 +206,30 @@ npm install -g gmgn-cli
 # gmgn-cli reads its API key from ~/.config/gmgn/.env
 ```
 
+Configure GMGN Telegram pool alerts:
+
+1. Join or subscribe your Telegram account to the GMGN Solana New Pool Alert group/channel.
+2. Create a Telegram API app at `https://my.telegram.org` under `API development tools`.
+3. Fill these values in `.env`:
+
+```bash
+TELEGRAM_API_ID=...
+TELEGRAM_API_HASH=...
+TELEGRAM_SESSION=memedog_gmgn
+```
+
+The listener reads GMGN pool-alert messages through your Telegram user session. It does not require a separate outbound alert bot.
+
+The default GMGN alert source is configured in [`src/memedog/config/thresholds.yaml`](src/memedog/config/thresholds.yaml):
+
+```yaml
+discovery:
+  gmgn_chats:
+    - "2122751413"  # Solana New Pool Alert - GMGN
+```
+
+If you use a different GMGN alert group/channel, replace that value with the group username or `-100...` channel id.
+
 Run V2 tests:
 
 ```bash
@@ -301,10 +325,16 @@ Outcome logic:
 
 ## Dashboard
 
-Start the V2 dashboard:
+Start the V2 dashboard only, using records already stored in `memedog.db`:
 
 ```bash
 MEMEDOG_DB=memedog.db .venv/bin/python -m streamlit run dashboard/app.py --server.port 8502 --server.headless true
+```
+
+Or start the live GMGN Telegram pool-alert listener plus dashboard:
+
+```bash
+.venv/bin/python -m memedogV2.serve --backend deepseek --db memedog.db --port 8502
 ```
 
 Open:
