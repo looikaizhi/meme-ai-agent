@@ -74,39 +74,64 @@ class HarnessRunner:
         run.steps.append(StepResult(name="build_evidence", status=StepStatus.OK,
                                     detail=f"missing={bundle.missing}"))
 
-        bull, m = await self._backend.complete(
-            role="bull", prompt=prompts.analyst_prompt("bull", bundle),
-            schema=prompts.ANALYST_SCHEMA)
-        run.steps.append(self._model_step("bull", m))
-        bear, m = await self._backend.complete(
-            role="bear", prompt=prompts.analyst_prompt("bear", bundle),
-            schema=prompts.ANALYST_SCHEMA)
-        run.steps.append(self._model_step("bear", m))
+        # The whole audit (real model calls + verdict parsing) is wrapped so run()
+        # never raises: a backend network error or malformed model output becomes a
+        # FAILED step with no signal, not an exception out of the pipeline.
+        try:
+            bull, m = await self._backend.complete(
+                role="bull", prompt=prompts.analyst_prompt("bull", bundle),
+                schema=prompts.ANALYST_SCHEMA)
+            run.steps.append(self._model_step("bull", m))
+            bear, m = await self._backend.complete(
+                role="bear", prompt=prompts.analyst_prompt("bear", bundle),
+                schema=prompts.ANALYST_SCHEMA)
+            run.steps.append(self._model_step("bear", m))
 
-        verdict, m = await self._backend.complete(
-            role="judge", prompt=prompts.judge_prompt(bundle, bull=bull, bear=bear),
-            schema=prompts.JUDGE_SCHEMA)
-        run.steps.append(self._model_step("judge", m))
-
-        # Guard: if judge verdict is malformed, fail gracefully (never raises)
-        if any(k not in verdict for k in _JUDGE_REQUIRED):
+            verdict, m = await self._backend.complete(
+                role="judge", prompt=prompts.judge_prompt(bundle, bull=bull, bear=bear),
+                schema=prompts.JUDGE_SCHEMA)
+            run.steps.append(self._model_step("judge", m))
+        except RateLimitBanned as e:
             run.steps.append(StepResult(name="signal", status=StepStatus.FAILED,
-                                        error="judge verdict missing required keys"))
+                                        error=f"rate-limit ban until {e.reset_at}"))
+            return self._finish(run)
+        except Exception as e:  # backend/network failure — degrade, don't crash
+            run.steps.append(StepResult(name="signal", status=StepStatus.FAILED,
+                                        error=f"audit model call failed: {e}"))
             return self._finish(run)
 
-        sig = Signal(
-            ca_address=ca,
-            signal=SignalKind(verdict["signal"]),
-            recommended=bool(verdict["recommended"]),
-            confidence=max(0.0, min(1.0, float(verdict["confidence"]))),
-            rationale=str(verdict["rationale"]),
-            evidence_refs=list(verdict.get("evidence_refs", [])),
-            trace_id=trace_id,
-        )
+        sig = self._build_signal(ca, verdict, trace_id)
+        if sig is None:
+            run.steps.append(StepResult(name="signal", status=StepStatus.FAILED,
+                                        error="judge verdict missing/invalid required fields"))
+            return self._finish(run)
+
         run.final_signal = sig
         run.steps.append(StepResult(name="signal", status=StepStatus.OK,
                                     detail=f"{sig.signal.value} recommended={sig.recommended}"))
         return self._finish(run)
+
+    @staticmethod
+    def _build_signal(ca: str, verdict: dict, trace_id: str):
+        """Validate a judge verdict into a Signal, or return None if malformed.
+        Never raises — invalid signal enum / non-numeric confidence -> None."""
+        if not isinstance(verdict, dict) or any(k not in verdict for k in _JUDGE_REQUIRED):
+            return None
+        try:
+            kind = SignalKind(str(verdict["signal"]).upper())
+            confidence = max(0.0, min(1.0, float(verdict["confidence"])))
+        except (ValueError, TypeError):
+            return None
+        refs = verdict.get("evidence_refs", [])
+        return Signal(
+            ca_address=ca,
+            signal=kind,
+            recommended=bool(verdict["recommended"]),
+            confidence=confidence,
+            rationale=str(verdict["rationale"]),
+            evidence_refs=list(refs) if isinstance(refs, list) else [],
+            trace_id=trace_id,
+        )
 
     @staticmethod
     def _model_step(role: str, rec: ModelCallRecord) -> StepResult:

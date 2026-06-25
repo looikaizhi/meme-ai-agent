@@ -73,3 +73,57 @@ async def test_ratelimit_ban_recorded_no_signal():
     run = await runner.run("CA", "LP")
     assert run.final_signal is None
     assert any(s.status == StepStatus.FAILED for s in run.steps)
+
+
+# --- C1/I3: run() must never raise on malformed model output or backend errors ---
+
+class _BoomBackend:
+    name = "boom"
+    async def complete(self, *, role, prompt, schema):
+        raise RuntimeError("network down")
+
+
+def _backend_with_judge(judge_obj):
+    return FakeBackend(responses={
+        "bull": {"thesis": "x", "points": []},
+        "bear": {"thesis": "y", "points": []},
+        "judge": judge_obj,
+    })
+
+
+def _clean_runner(backend):
+    reg = ToolRegistry(source=FixtureToolSource(security=CLEAN_SEC, info=CLEAN_INFO))
+    return HarnessRunner(tool_registry=reg, backend=backend, hardfilter_cfg=CFG, recorder=None)
+
+
+@pytest.mark.asyncio
+async def test_backend_error_yields_failed_step_no_signal():
+    run = await _clean_runner(_BoomBackend()).run("CA", "LP")
+    assert run.final_signal is None
+    assert any(s.name == "signal" and s.status == StepStatus.FAILED for s in run.steps)
+
+
+@pytest.mark.asyncio
+async def test_invalid_signal_enum_fails_gracefully():
+    judge = {"signal": "STRONG_BUY", "recommended": True, "confidence": 0.7,
+             "rationale": "x", "evidence_refs": []}
+    run = await _clean_runner(_backend_with_judge(judge)).run("CA", "LP")
+    assert run.final_signal is None
+    assert any(s.name == "signal" and s.status == StepStatus.FAILED for s in run.steps)
+
+
+@pytest.mark.asyncio
+async def test_non_numeric_confidence_fails_gracefully():
+    judge = {"signal": "BULLISH", "recommended": True, "confidence": "high",
+             "rationale": "x", "evidence_refs": []}
+    run = await _clean_runner(_backend_with_judge(judge)).run("CA", "LP")
+    assert run.final_signal is None
+
+
+@pytest.mark.asyncio
+async def test_out_of_range_confidence_is_clamped():
+    judge = {"signal": "BULLISH", "recommended": True, "confidence": 1.5,
+             "rationale": "x", "evidence_refs": []}
+    run = await _clean_runner(_backend_with_judge(judge)).run("CA", "LP")
+    assert run.final_signal is not None
+    assert run.final_signal.confidence == 1.0
