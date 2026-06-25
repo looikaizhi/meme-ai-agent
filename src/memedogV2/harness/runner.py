@@ -42,6 +42,8 @@ class HarnessRunner:
             run.steps.append(StepResult(name="read_facts", status=StepStatus.FAILED,
                                         error=f"resolve failed: {e}"))
             return self._finish(run)
+        run.facts_snapshot = resolved.facts.model_dump()
+        run.facts_sources = dict(resolved.sources)
         run.steps.append(StepResult(name="read_facts", status=StepStatus.OK,
                                     tool_calls=list(resolved.attempts),
                                     detail=f"sources={resolved.sources}"))

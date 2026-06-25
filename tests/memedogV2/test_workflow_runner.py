@@ -44,6 +44,8 @@ async def test_clean_facts_run_full_workflow():
     run = await _runner(CLEAN).run("CA", "LP", trace_id="t1")
     sig = run.final_signal
     assert sig is not None and sig.recommended is True
+    assert run.facts_snapshot["price_usd"] == 0.05
+    assert run.facts_sources["price_usd"] == "gmgn"
     # detailed report carried into the signal
     assert sig.summary and sig.strengths and sig.risks and sig.key_metrics
     names = [s.name for s in run.steps]

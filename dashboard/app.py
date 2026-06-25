@@ -1,26 +1,18 @@
-"""MemeDog Radar — Streamlit Dashboard.
-
-Entry point::
-
-    streamlit run dashboard/app.py
-
-All rendering is inside ``main()`` so importing this module does not trigger
-Streamlit calls (safe for ``import ast; ast.parse(...)`` and ``import`` smoke
-tests).
-"""
+"""MemeDog V2 Streamlit dashboard."""
 from __future__ import annotations
 
 import os
 
 
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-
-
 _STAGE_ICONS = {
-    "scan": "🔍", "hardfilter": "🚧", "enrich": "🧪", "score": "📊",
-    "judge": "⚖️", "signal": "📣", "trade": "💰", "error": "❌",
+    "scan": "🔍",
+    "hardfilter": "🚧",
+    "enrich": "🧪",
+    "score": "📊",
+    "judge": "⚖️",
+    "signal": "📣",
+    "trade": "💰",
+    "error": "❌",
 }
 
 
@@ -49,334 +41,107 @@ def format_time_local(value) -> str:
     return value.astimezone().strftime("%H:%M:%S")
 
 
-def main() -> None:
-    """Render the MemeDog Radar dashboard."""
-    import streamlit as st
-    import pandas as pd
+def _hardfilter_reason(row: dict) -> str:
+    steps = row.get("payload", {}).get("steps", [])
+    for step in steps:
+        if step.get("name") == "hardfilter" and step.get("detail"):
+            return str(step["detail"])
+        if step.get("status") == "failed" and step.get("error"):
+            return str(step["error"])
+    return ""
 
-    from memedog.config import load_config
-    from memedog.dashboard_helpers import compute_summary
-    from memedog.models import SignalType
-    from memedog.store import Store
+
+def main() -> None:
+    """Render only V2 scanner intake and audit outcomes."""
+    import pandas as pd
+    import streamlit as st
+
+    from memedogV2.store import V2Store
 
     st.set_page_config(
-        page_title="MemeDog Radar",
+        page_title="MemeDog V2",
         page_icon="🐕",
         layout="wide",
     )
 
-    # ------------------------------------------------------------------
-    # Auto-refresh: use st.autorefresh when available (Streamlit >= 1.28),
-    # otherwise fall back to a sidebar refresh-interval control + st.rerun().
-    # All import and invocation is guarded so the app never crashes on older
-    # Streamlit installs.
-    # ------------------------------------------------------------------
-    _REFRESH_DEFAULT_SEC = 3 if os.environ.get("MEMEDOG_DEMO") == "1" else 30
+    refresh_sec = st.sidebar.number_input(
+        "Auto-refresh interval (s)",
+        min_value=5,
+        max_value=300,
+        value=30,
+        step=5,
+        key="_autorefresh_interval",
+    )
     if hasattr(st, "autorefresh"):
-        # streamlit-autorefresh or Streamlit >= 1.28 native
         try:
-            refresh_sec = st.sidebar.number_input(
-                "Auto-refresh interval (s)",
-                min_value=5,
-                max_value=300,
-                value=_REFRESH_DEFAULT_SEC,
-                step=5,
-                key="_autorefresh_interval",
-            )
             st.autorefresh(interval=int(refresh_sec) * 1000, key="_dashboard_autorefresh")
         except Exception:
-            pass  # autorefresh not supported on this build — continue silently
-    else:
-        # Fallback: sidebar manual-refresh button
-        st.sidebar.markdown("**Auto-refresh**")
-        if st.sidebar.button("Refresh now", key="_manual_refresh"):
-            st.rerun()
+            pass
+    elif st.sidebar.button("Refresh now", key="_manual_refresh"):
+        st.rerun()
 
-    st.title("🐕 MemeDog Radar — Signal Dashboard")
+    st.title("MemeDog V2")
 
-    # ------------------------------------------------------------------
-    # Open store (path from env or default)
-    # ------------------------------------------------------------------
     db_path = os.environ.get("MEMEDOG_DB", "memedog.db")
-    store = Store(db_path)
-
+    store = V2Store(db_path)
     try:
-        try:
-            cfg = load_config()
-        except Exception:
-            cfg = None
+        scans = store.recent_scanner_items(limit=100)
+        runs = store.recent_runs(limit=100)
 
-        # Install secret redaction so dashboard logs never leak API keys.
-        if cfg is not None:
-            try:
-                from memedog.observability.redaction import install_redaction
-                install_redaction(cfg.settings)
-            except Exception:
-                pass
+        scan_col, run_col = st.columns([1, 2])
 
-        # ------------------------------------------------------------------
-        # Section 0: GMGN Telegram launch captures (no DexScreener gate)
-        # ------------------------------------------------------------------
-        st.header("GMGN Launch Captures")
-        try:
-            from memedog.discovery.gmgn_telegram import is_gmgn_launch_alert
-
-            gmgn_alerts = [
-                alert
-                for alert in store.recent_discovery_alerts(limit=250)
-                if is_gmgn_launch_alert(alert.get("raw_text", ""))
-            ][:50]
-        except Exception:
-            gmgn_alerts = []
-
-        if not gmgn_alerts:
-            st.info("No GMGN launch captures recorded yet.")
-        else:
-            rows = [
-                {
-                    "Time": format_time_local(alert["ts"]),
-                    "Mint Address": format_addr(alert["mint"]),
-                    "Creator Address": format_addr(
-                        alert.get("creator_address", alert.get("author", ""))
-                    ),
-                    "Liquidity Pool Address": format_addr(
-                        alert.get("liquidity_pool_address", "")
-                    ),
-                    "Source": alert.get("source", ""),
-                    "Raw Preview": " ".join(alert.get("raw_text", "").split())[:120],
-                }
-                for alert in gmgn_alerts
-            ]
-            st.dataframe(pd.DataFrame(rows), width="stretch")
-
-        # ------------------------------------------------------------------
-        # Section 0b: Live activity stream (real-time pipeline events)
-        # ------------------------------------------------------------------
-        st.header("🔴 实时活动流 (Live Activity)")
-        try:
-            events = store.recent_events(limit=40)
-        except Exception:
-            events = []
-        if not events:
-            st.info("暂无事件。运行 `python -m memedog.serve --demo` 让漏斗流动起来。")
-        else:
-            st.code("\n".join(format_event_row(e) for e in events), language=None)
-
-        # ------------------------------------------------------------------
-        # Section 1: Live signal stream
-        # ------------------------------------------------------------------
-        st.header("1. Live Signal Stream")
-
-        signals = store.recent_signals(limit=50)
-
-        if not signals:
-            st.info("No signals recorded yet.  Run the pipeline to generate signals.")
-        else:
-            for sig in signals:
-                # Color by signal type
-                if sig.signal == SignalType.BULLISH:
-                    color = "green"
-                    icon = "🟢"
-                elif sig.signal == SignalType.BEARISH:
-                    color = "red"
-                    icon = "🔴"
-                else:
-                    color = "orange"
-                    icon = "🟡"
-
-                red_flags_str = ", ".join(sig.red_flags) if sig.red_flags else "none"
-                bull_str = "; ".join(sig.bull_points[:2]) if sig.bull_points else "—"
-                bear_str = "; ".join(sig.bear_points[:2]) if sig.bear_points else "—"
-
-                with st.container():
-                    cols = st.columns([1, 2, 1, 1, 2])
-                    cols[0].markdown(f"**{icon} {sig.symbol}**")
-                    cols[1].markdown(
-                        f"<span style='color:{color}'>{sig.signal.value}</span>",
-                        unsafe_allow_html=True,
-                    )
-                    cols[2].markdown(f"Conf: **{sig.confidence:.0%}**")
-                    cols[3].markdown(f"Score: **{sig.score_total:.1f}**")
-                    cols[4].markdown(
-                        f"Bull: {bull_str} | Bear: {bear_str} | Flags: {red_flags_str}"
-                    )
-                st.divider()
-
-        # ------------------------------------------------------------------
-        # Section 2: Paper trading — open positions + closed trades + summary
-        # ------------------------------------------------------------------
-        st.header("2. Paper Trading")
-
-        open_positions = store.open_positions()
-        all_trades = store.all_trades()
-
-        col_open, col_summary = st.columns([2, 1])
-
-        with col_open:
-            st.subheader("Open Positions")
-            if open_positions:
-                rows = [
-                    {
-                        "Symbol": p.symbol,
-                        "Mint": p.mint[:8] + "...",
-                        "Entry Price": f"${p.entry_price:.6f}",
-                        "Size USD": f"${p.size_usd:.2f}",
-                        "Status": p.status,
-                        "TP %": f"{p.take_profit_pct:.0%}",
-                        "SL %": f"{p.stop_loss_pct:.0%}",
-                    }
-                    for p in open_positions
-                ]
-                st.dataframe(pd.DataFrame(rows), width="stretch")
+        with scan_col:
+            st.subheader("GMGN New Pool Intake")
+            if not scans:
+                st.info("No V2 scanner intake yet.")
             else:
-                st.info("No open positions.")
-
-        starting_balance = (
-            cfg.papertrader.starting_balance_usd if cfg else 10_000.0
-        )
-        summary = compute_summary(all_trades, starting_balance=starting_balance)
-
-        with col_summary:
-            st.subheader("Summary")
-            st.metric("Balance", f"${summary['balance']:,.2f}")
-            st.metric("Total PnL", f"${summary['total_pnl']:+,.2f}")
-            st.metric("Win Rate", f"{summary['win_rate']:.1%}")
-            st.metric("Avg Hold", f"{summary['avg_hold_minutes']:.0f} min")
-            st.metric("Trades", str(summary["num_trades"]))
-
-        st.subheader("Closed Trades")
-        if all_trades:
-            rows = [
-                {
-                    "Symbol": t.symbol,
-                    "Entry": f"${t.entry_price:.6f}",
-                    "Exit": f"${t.exit_price:.6f}",
-                    "PnL USD": f"${t.pnl_usd:+.2f}",
-                    "PnL %": f"{t.pnl_pct * 100:+.1f}%",
-                    "Reason": t.exit_reason,
-                    "Entry Time": t.entry_time.strftime("%Y-%m-%d %H:%M"),
-                    "Exit Time": t.exit_time.strftime("%Y-%m-%d %H:%M"),
-                }
-                for t in all_trades
-            ]
-            st.dataframe(pd.DataFrame(rows), width="stretch")
-        else:
-            st.info("No closed trades yet.")
-
-        # ------------------------------------------------------------------
-        # Section 3: Candidate funnel (driven by store.recent_funnel_events)
-        # ------------------------------------------------------------------
-        st.header("3. Candidate Funnel")
-
-        funnel_events = store.recent_funnel_events(limit=20)
-
-        if not funnel_events:
-            st.info(
-                "No funnel events recorded yet.  "
-                "Run the pipeline (python -m memedog) to populate this section."
-            )
-        else:
-            # Latest cycle metrics
-            latest = funnel_events[0]
-            col_a, col_b, col_c, col_d = st.columns(4)
-            col_a.metric("Scanned (latest cycle)", str(latest["scanned"]))
-            col_b.metric("Passed HardFilter", str(latest["passed_hardfilter"]))
-            col_c.metric("Signals produced", str(latest["signals"]))
-            conversion = (
-                f"{latest['signals'] / latest['scanned'] * 100:.1f}%"
-                if latest["scanned"] > 0
-                else "—"
-            )
-            col_d.metric("Conversion", conversion)
-
-            st.caption(
-                f"Latest cycle: {latest['ts'].strftime('%Y-%m-%d %H:%M:%S UTC')}  |  "
-                "Funnel: Scanner → HardFilter → Enricher → ScoreEngine → LLMJudge"
-            )
-
-            # Table of dropped candidates (flattened from recent events)
-            dropped_rows = []
-            for ev in funnel_events:
-                ts_str = ev["ts"].strftime("%H:%M:%S")
-                for mint, reason in ev["dropped"]:
-                    dropped_rows.append(
-                        {"Time": ts_str, "Mint": mint[:12] + "..." if len(mint) > 12 else mint, "Rule Hit": reason}
-                    )
-
-            st.subheader("Dropped Candidates (recent cycles)")
-            if dropped_rows:
-                st.dataframe(pd.DataFrame(dropped_rows), width="stretch")
-            else:
-                st.info("No candidates were dropped in the last 20 cycles.")
-
-            # Table of flagged candidates
-            flagged_rows = []
-            for ev in funnel_events:
-                ts_str = ev["ts"].strftime("%H:%M:%S")
-                for mint, reason in ev["flagged"]:
-                    flagged_rows.append(
-                        {"Time": ts_str, "Mint": mint[:12] + "..." if len(mint) > 12 else mint, "Flag": reason}
-                    )
-
-            if flagged_rows:
-                st.subheader("Flagged Candidates (passed with caveats)")
-                st.dataframe(pd.DataFrame(flagged_rows), width="stretch")
-
-        # ------------------------------------------------------------------
-        # Section 4: Config snapshot
-        # ------------------------------------------------------------------
-        st.header("4. Config Snapshot")
-
-        if cfg is None:
-            st.warning("Could not load config (thresholds.yaml not found).")
-        else:
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                st.subheader("HardFilter Thresholds")
-                st.json(
-                    {
-                        "min_liquidity_usd": cfg.hardfilter.momentum.min_liquidity_usd,
-                        "min_volume_5m": cfg.hardfilter.momentum.min_volume_5m,
-                        "max_top10_pct": cfg.hardfilter.holders.max_top10_pct,
-                        "max_single_wallet_pct": cfg.hardfilter.holders.max_single_wallet_pct,
-                        "max_dev_pct": cfg.hardfilter.holders.max_dev_pct,
-                    }
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Time": format_time_local(row["ts"]),
+                                "CA": format_addr(row["ca_address"]),
+                                "LP": format_addr(row["lp_address"]),
+                                "Queued": row["enqueued"],
+                                "Trace": row["trace_id"],
+                            }
+                            for row in scans
+                        ]
+                    ),
+                    width="stretch",
                 )
 
-            with col2:
-                st.subheader("Scoring Weights")
-                st.json(cfg.scoring.weights)
-                st.subheader("Alert Config")
-                st.json(
-                    {
-                        "enabled": cfg.alert.enabled,
-                        "only_signal": cfg.alert.only_signal,
-                        "min_confidence": cfg.alert.min_confidence,
-                    }
-                )
-
-            with col3:
-                st.subheader("LLM Models")
-                st.json(cfg.llmjudge.models)
-                st.subheader("PaperTrader")
-                st.json(
-                    {
-                        "starting_balance_usd": cfg.papertrader.starting_balance_usd,
-                        "size_usd": cfg.papertrader.size_usd,
-                        "take_profit_pct": cfg.papertrader.take_profit_pct,
-                        "stop_loss_pct": cfg.papertrader.stop_loss_pct,
-                        "max_hold_minutes": cfg.papertrader.max_hold_minutes,
-                        "entry_min_confidence": cfg.papertrader.entry_min_confidence,
-                    }
+        with run_col:
+            st.subheader("Audit Outcomes")
+            if not runs:
+                st.info("No V2 audit runs yet.")
+            else:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Time": format_time_local(row["ts"]),
+                                "CA": format_addr(row["ca_address"]),
+                                "Status": row["status"],
+                                "Signal": row["signal"] or "-",
+                                "Recommended": row["recommended"],
+                                "Confidence": (
+                                    ""
+                                    if row["confidence"] is None
+                                    else f"{row['confidence']:.0%}"
+                                ),
+                                "Backend": row["backend"],
+                                "Reason": _hardfilter_reason(row)[:180],
+                                "Summary": row["summary"][:180],
+                            }
+                            for row in runs
+                        ]
+                    ),
+                    width="stretch",
                 )
     finally:
         store.close()
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     main()

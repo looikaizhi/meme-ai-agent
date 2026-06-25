@@ -47,6 +47,7 @@ from memedog.hardfilter.hardfilter import HardFilter
 from memedog.enricher.enricher import Enricher
 from memedog.llm.provider import FakeProvider
 from memedog.llmjudge.judge import LLMJudge
+from memedog.llmjudge.prompts import judge_prompt
 from memedog.models import SignalType
 from memedog.orchestrator import Orchestrator
 from memedog.papertrader.trader import PaperTrader
@@ -83,6 +84,13 @@ _GOOD_PAIR = {
     "txns": {"m5": {"buys": 50, "sells": 20}},  # ratio = 2.5, >= 1.0
     "priceChange": {"m5": 4.5},
     "pairCreatedAt": _NOW_TS_MS,
+    "info": {
+        "socials": [
+            {"type": "twitter", "url": "https://x.com/gooddog"},
+            {"type": "telegram", "url": "https://t.me/gooddog"},
+        ],
+        "websites": [{"url": "https://gooddog.example"}],
+    },
 }
 
 _BAD_PAIR = {
@@ -378,6 +386,38 @@ async def test_full_pipeline_e2e(store: Store) -> None:
     assert open_pos[0].mint == "MINT_GOOD"
     assert open_pos[0].status == "OPEN"
     assert open_pos[0].entry_price == pytest.approx(0.00123)
+
+
+@pytest.mark.asyncio
+async def test_scanner_pair_info_flows_into_enriched_prompt_evidence() -> None:
+    """DexScreener pair['info'] should survive Scanner -> Enricher -> LLM evidence."""
+    cfg = _make_integration_cfg()
+    scanner = Scanner(client=FakeDexScreenerClient(), cfg=cfg.scanner)
+
+    candidates = await scanner.scan()
+    candidate = next(c for c in candidates if c.mint == "MINT_GOOD")
+
+    assert set(candidate.social_platforms) == {"twitter", "telegram", "website"}
+
+    enricher = Enricher(
+        rugcheck_client=FakeRugCheckClient(),
+        helius_client=FakeHeliusClient(),
+        twitter_client=FakeTwitterClient(),
+        cfg=cfg.enricher,
+    )
+    snapshot = await enricher.enrich(candidate)
+
+    assert snapshot.social.available is True
+    assert snapshot.social.has_twitter is True
+    assert snapshot.social.has_telegram is True
+    assert snapshot.social.has_website is True
+    assert snapshot.social.socials_count == 3
+
+    score = ScoreEngine(cfg=cfg.scoring).score(snapshot)
+    prompt_text = judge_prompt(snapshot, score, "bull", "bear")[-1]["content"]
+
+    assert "SOCIAL" in prompt_text
+    assert "tw+tg+web(3)" in prompt_text
 
 
 @pytest.mark.asyncio

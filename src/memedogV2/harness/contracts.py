@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -48,4 +48,6 @@ class HarnessRun(BaseModel):
     backend: str
     mode: str               # "production" | "evaluation"
     steps: list[StepResult] = Field(default_factory=list)
+    facts_snapshot: dict[str, Any] = Field(default_factory=dict)
+    facts_sources: dict[str, str] = Field(default_factory=dict)
     final_signal: Optional[Signal] = None

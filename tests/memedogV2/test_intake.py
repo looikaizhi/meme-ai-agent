@@ -1,5 +1,6 @@
 import pytest
-from memedogV2.intake import AddressIntake
+from memedogV2.harness.contracts import HarnessRun
+from memedogV2.intake import AddressIntake, IntakeProcessor
 
 
 @pytest.mark.asyncio
@@ -26,3 +27,41 @@ async def test_dedup_returns_empty_trace_for_duplicate():
     first = q.enqueue("CA1", "LP1")
     dup = q.enqueue("CA1", "LP1")
     assert first and dup == ""
+
+
+class FakeRunner:
+    def __init__(self):
+        self.calls = []
+
+    async def run(self, ca, lp, trace_id=""):
+        self.calls.append((ca, lp, trace_id))
+        return HarnessRun(run_id="run1", ca_address=ca, backend="fake", mode="production")
+
+
+@pytest.mark.asyncio
+async def test_processor_passes_intake_item_to_runner():
+    q = AddressIntake()
+    tid = q.enqueue("CA1", "LP1")
+    runner = FakeRunner()
+    processor = IntakeProcessor(intake=q, runner=runner)
+
+    run = await processor.process_next()
+
+    assert runner.calls == [("CA1", "LP1", tid)]
+    assert run.ca_address == "CA1"
+    assert q.size() == 0
+
+
+@pytest.mark.asyncio
+async def test_processor_drains_available_items_in_order():
+    q = AddressIntake()
+    tid1 = q.enqueue("CA1", "LP1")
+    tid2 = q.enqueue("CA2", "LP2")
+    runner = FakeRunner()
+    processor = IntakeProcessor(intake=q, runner=runner)
+
+    runs = await processor.drain_available()
+
+    assert [r.ca_address for r in runs] == ["CA1", "CA2"]
+    assert runner.calls == [("CA1", "LP1", tid1), ("CA2", "LP2", tid2)]
+    assert q.size() == 0
