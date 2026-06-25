@@ -6,7 +6,7 @@
 
 **Architecture:** 每个维度一个独立 "provider" 函数(`safety / holders / momentum / social`),各自封装一个 client。Enricher 用 `asyncio.gather(..., return_exceptions=True)` 并行执行;单个 provider 失败 → 该维度 `available=False`,其余照常(降级而非崩溃)。
 
-**Tech Stack:** asyncio + httpx。数据源:RugCheck、Helius/Solana RPC、DexScreener、X/Twitter。
+**Tech Stack:** asyncio + httpx。数据源:RugCheck(to be removed)、Helius/Solana RPC、DexScreener、X/Twitter。
 
 ---
 

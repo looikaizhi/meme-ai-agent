@@ -67,6 +67,7 @@ def test_install_redaction_wires_handlers_for_child_loggers():
             anthropic_api_key = None
             deepseek_api_key = None
             telegram_bot_token = None
+            telegram_api_hash = None
 
         install_redaction(_S())
         logging.getLogger("memedog.clients.helius").warning(
@@ -79,5 +80,36 @@ def test_install_redaction_wires_handlers_for_child_loggers():
     finally:
         root.removeHandler(handler)
         # remove the filter we installed so other tests are unaffected
+        for filt in list(root.filters):
+            root.removeFilter(filt)
+
+
+def test_install_redaction_scrubs_telegram_api_hash():
+    root = logging.getLogger()
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    root.addHandler(handler)
+    try:
+        class _S:
+            helius_api_key = None
+            rugcheck_api_key = None
+            twitter_bearer = None
+            openai_api_key = None
+            anthropic_api_key = None
+            deepseek_api_key = None
+            telegram_bot_token = None
+            telegram_api_hash = "telegram-api-hash-secret"
+
+        install_redaction(_S())
+        logging.getLogger("memedog.discovery.gmgn_telegram").warning(
+            "hash=%s", "telegram-api-hash-secret"
+        )
+        handler.flush()
+        out = buf.getvalue()
+        assert "telegram-api-hash-secret" not in out
+        assert "***" in out
+    finally:
+        root.removeHandler(handler)
         for filt in list(root.filters):
             root.removeFilter(filt)

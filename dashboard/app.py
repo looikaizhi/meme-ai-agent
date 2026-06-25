@@ -35,6 +35,20 @@ def format_event_row(event: dict) -> str:
     return f"{tstr}  {icon} {event.get('stage','')}  {sym}  [{status}]  {detail}".rstrip()
 
 
+def format_addr(addr: str, *, head: int = 8, tail: int = 6) -> str:
+    """Compact a long token/wallet address for dashboard tables."""
+    if not addr:
+        return ""
+    if len(addr) <= head + tail + 3:
+        return addr
+    return f"{addr[:head]}...{addr[-tail:]}"
+
+
+def format_time_local(value) -> str:
+    """Format a stored UTC timestamp in the machine's local timezone."""
+    return value.astimezone().strftime("%H:%M:%S")
+
+
 def main() -> None:
     """Render the MemeDog Radar dashboard."""
     import streamlit as st
@@ -101,7 +115,42 @@ def main() -> None:
                 pass
 
         # ------------------------------------------------------------------
-        # Section 0: Live activity stream (real-time pipeline events)
+        # Section 0: GMGN Telegram launch captures (no DexScreener gate)
+        # ------------------------------------------------------------------
+        st.header("GMGN Launch Captures")
+        try:
+            from memedog.discovery.gmgn_telegram import is_gmgn_launch_alert
+
+            gmgn_alerts = [
+                alert
+                for alert in store.recent_discovery_alerts(limit=250)
+                if is_gmgn_launch_alert(alert.get("raw_text", ""))
+            ][:50]
+        except Exception:
+            gmgn_alerts = []
+
+        if not gmgn_alerts:
+            st.info("No GMGN launch captures recorded yet.")
+        else:
+            rows = [
+                {
+                    "Time": format_time_local(alert["ts"]),
+                    "Mint Address": format_addr(alert["mint"]),
+                    "Creator Address": format_addr(
+                        alert.get("creator_address", alert.get("author", ""))
+                    ),
+                    "Liquidity Pool Address": format_addr(
+                        alert.get("liquidity_pool_address", "")
+                    ),
+                    "Source": alert.get("source", ""),
+                    "Raw Preview": " ".join(alert.get("raw_text", "").split())[:120],
+                }
+                for alert in gmgn_alerts
+            ]
+            st.dataframe(pd.DataFrame(rows), width="stretch")
+
+        # ------------------------------------------------------------------
+        # Section 0b: Live activity stream (real-time pipeline events)
         # ------------------------------------------------------------------
         st.header("🔴 实时活动流 (Live Activity)")
         try:

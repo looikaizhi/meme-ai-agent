@@ -142,7 +142,6 @@ codex login                      # 一次性浏览器登录你的 ChatGPT 账户
 | `HELIUS_API_KEY` | 持币分布 / 聪明钱 | 该维度降级 |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Telegram 告警 | 告警静默跳过 |
 | `TWITTER_BEARER` | 社交热度 | 社交维度降级 |
-| `BITGET_PLAYBOOK_ACCESS_KEY` | Bitget GetAgent / Playbook 云端回测 | 只影响 hosted Playbook 回测 |
 | Codex | LLM 裁决 | **无需 env key** —— 用 `codex login` |
 | DexScreener / RugCheck | 扫描 + 安全 | 无需 key(公开) |
 
@@ -165,40 +164,13 @@ python scripts/seed_demo.py             # 灌入示例数据用于看板演示
 streamlit run dashboard/app.py          # 只起看板
 ```
 
-### 回测 Backtesting
-
-Bitget toolkit / Playbook 强调的核心回测指标是 **PnL、max drawdown、Sharpe、win rate**。本项目现在内置一个本地回测器,复用 [`PaperTrader`](src/memedog/papertrader/) 的同一套入场置信度、仓位大小、止盈、止损、最长持仓配置,便于在没有 Playbook API key 时先离线验证信号质量。
-
-```bash
-python scripts/run_backtest.py \
-  --bars tests/fixtures/backtesting/bars.json \
-  --signals tests/fixtures/backtesting/signals.json
-```
-
-输入格式:
-- `bars`: 单币种 OHLCV JSON 数组,字段为 `ts/open/high/low/close/volume`。
-- `signals`: 历史信号 JSON 数组,字段为 `ts/mint/symbol/signal/confidence/price_usd/trace_id`。
-
-输出为 Playbook 风格的 JSON 指标: `total_return_usd`、`total_return_pct`、`max_drawdown_pct`、`sharpe`、`win_rate`、`trade_count` 和逐笔交易。若同一根 K 线同时触发止盈和止损,回测器保守按止损成交,避免高估 meme coin 策略。
-
-若要使用 Bitget 官方 hosted Playbook,可按 toolkit 页面先安装 Agent Hub / getagent,再把本项目信号逻辑整理成 Playbook strategy prompt 并上传回测;本地回测器用于无 key、可测试、可复现实验。
-
-官方 GetAgent / Playbook 云端回测:
-
-```bash
-export BITGET_PLAYBOOK_ACCESS_KEY=...   # 或放入 .env
-python scripts/run_playbook_backtest.py
-```
-
-这会把 [`playbooks/memedog-bitget-momentum/`](playbooks/memedog-bitget-momentum/) 打包成 GetAgent 允许的 `manifest.yaml + backtest.yaml + src/**` 结构,上传到 `https://api.bitget.com/api/v1/playbook/upload`,触发 `/api/v1/playbook/run`,并轮询输出官方回测结果。注意:Playbook 历史引擎只适合可重放的确定性策略,所以这里上传的是 MemeDog 的 Bitget K 线动量代理策略;真实 Solana 毕业币 scanner + RugCheck + LLM 辩论仍以本地信号回测和 paper trading 做验证。
-
 ---
 
 ## 7. 真实测试(不是只有 mock)
 
 测试采用**真实数据驱动**,分两层:
 
-- **默认套件 —— `pytest` → 549 个测试,完全离线、确定性。** 每个外部 API 测试都由**真实抓取的 API 响应体**驱动(存于 [`tests/fixtures/`](tests/fixtures/),可用 [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py) 刷新;密钥/PII 绝不入库)。已验证**零外部联网**(`pytest --disable-socket --allow-hosts=127.0.0.1,::1,localhost`)。覆盖智能重试/限流、密钥脱敏、实时事件流、回测指标,以及完整的离线 `--demo` 端到端 cycle。
+- **默认套件 —— `pytest` → 534 个测试,完全离线、确定性。** 每个外部 API 测试都由**真实抓取的 API 响应体**驱动(存于 [`tests/fixtures/`](tests/fixtures/),可用 [`scripts/capture_fixtures.py`](scripts/capture_fixtures.py) 刷新;密钥/PII 绝不入库)。已验证**零外部联网**(`pytest --disable-socket --allow-hosts=127.0.0.1,::1,localhost`)。覆盖智能重试/限流、密钥脱敏、实时事件流,以及完整的离线 `--demo` 端到端 cycle。
 - **live 层 —— `pytest -m live` → 9 个测试**,真实命中 DexScreener / RugCheck / Helius / Codex / Telegram,并跑一次完整端到端 cycle。缺对应 key/二进制时各自自动 skip;Telegram 双重闸门(`MEMEDOG_LIVE_TELEGRAM=1`)防止误发。
 
 五个外部集成 + 一次完整的真实 `run_cycle` 均已真实跑通并确认可用。
@@ -213,7 +185,7 @@ src/memedog/
 ├── orchestrator.py        # 把 1→6 各段串成漏斗 cycle,逐阶段发实时事件
 ├── models/                # 带类型的数据契约(TokenCandidate → Signal → TradeRecord)
 ├── clients/               # 每个 API 一个封装 + 带重试/限流的基类 + ratelimit.py
-├── scanner/  hardfilter/  enricher/  scoring/  llmjudge/  papertrader/  backtesting/
+├── scanner/  hardfilter/  enricher/  scoring/  llmjudge/  papertrader/
 ├── llm/                   # provider 无关的 LLM 层(codex / litellm)+ 结构化输出
 ├── demo/                  # 离线 demo 源(fixture 候选 + ReplayProvider + 随机游走价格)
 ├── observability/         # 全局密钥脱敏日志过滤器

@@ -73,3 +73,13 @@ discovery:
   buffer_ttl_min: 20
   reconnect_backoff_initial_sec: 1.0
   reconnect_backoff_max_sec: 30.0
+  gmgn_enabled: true
+  gmgn_chain: solana
+  # Telegram groups/channels/users where GMGN alert messages appear.
+  # These private ids were discovered via scripts/telegram_diagnose.py.
+  # gmgn_chat is kept as the single-chat fallback; gmgn_chats wins when set.
+  gmgn_chat: "2122751413"
+  gmgn_chats:
+    - "2122751413"      # Solana New Pool Alert - GMGN
+  gmgn_backfill_limit: 5
+  gmgn_max_open_age_min: 30

@@ -12,6 +12,7 @@ dependencies = [
     "litellm>=1.40",
     "pyyaml>=6.0",
     "streamlit>=1.33",
+    "telethon>=1.36",
 ]
 
 [project.optional-dependencies]

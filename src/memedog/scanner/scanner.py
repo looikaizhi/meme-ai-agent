@@ -44,9 +44,10 @@ class Scanner:
         A :class:`~memedog.config.settings.ScannerConfig` instance.
     """
 
-    def __init__(self, client: TokenDiscoverer, cfg: ScannerConfig) -> None:
+    def __init__(self, client: TokenDiscoverer, cfg: ScannerConfig, store=None) -> None:
         self._client = client
         self._cfg = cfg
+        self._store = store
         # mint -> unix timestamp (float) of first emission
         self._seen: dict[str, float] = {}
 
@@ -125,6 +126,7 @@ class Scanner:
             # Record seen and collect
             self._seen[mint] = now_ts
             candidates.append(candidate)
+            self._save_scanner_candidate(candidate)
 
         return candidates
 
@@ -227,3 +229,29 @@ class Scanner:
             price_change_5m=float(pair["priceChange"]["m5"]),
             trace_id=uuid4().hex,
         )
+
+    def _metadata_for(self, mint: str) -> dict:
+        getter = getattr(self._client, "get_token_metadata", None)
+        if callable(getter):
+            try:
+                return getter(mint)
+            except Exception as exc:
+                logger.debug("Scanner metadata lookup failed for mint=%s: %s", mint, exc)
+        return {}
+
+    def _save_scanner_candidate(self, candidate: TokenCandidate) -> None:
+        if self._store is None:
+            return
+        metadata = self._metadata_for(candidate.mint)
+        try:
+            self._store.save_scanner_candidate(
+                candidate=candidate,
+                source=str(metadata.get("source") or ""),
+                raw_text=str(metadata.get("raw_text") or ""),
+            )
+        except Exception as exc:
+            logger.debug(
+                "Scanner failed to persist passed candidate mint=%s: %s",
+                candidate.mint,
+                exc,
+            )

@@ -19,6 +19,7 @@ _SECRET_ATTRS = (
     "anthropic_api_key",
     "deepseek_api_key",
     "telegram_bot_token",
+    "telegram_api_hash",
 )
 
 

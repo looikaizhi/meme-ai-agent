@@ -115,6 +115,14 @@ def make_fake_client(
     return client
 
 
+class _FakeStore:
+    def __init__(self):
+        self.scanner_candidates = []
+
+    def save_scanner_candidate(self, **kwargs):
+        self.scanner_candidates.append(kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Prefilter tests
 # ---------------------------------------------------------------------------
@@ -137,6 +145,33 @@ class TestPrefilter:
         assert len(results) == 1
         assert isinstance(results[0], TokenCandidate)
         assert results[0].mint == "MINT_AAA"
+
+    async def test_passing_candidate_is_persisted_with_discovery_source(self):
+        """Only a DexScreener-prefilter-passing candidate is saved to scanner output."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        pair = make_raw_pair(liquidity_usd=25_000, volume_m5=500, age_min=15)
+        client = make_fake_client(
+            addresses=["MINT_AAA"],
+            pairs_by_mint={"MINT_AAA": [pair]},
+        )
+        client.get_token_metadata = lambda mint: {
+            "source": "gmgn_telegram",
+            "raw_text": "raw alert",
+        }
+        store = _FakeStore()
+
+        scanner = Scanner(client=client, cfg=cfg, store=store)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert len(store.scanner_candidates) == 1
+        saved = store.scanner_candidates[0]
+        assert saved["candidate"].mint == "MINT_AAA"
+        assert saved["candidate"].pair_address == "PAIR_AAA"
+        assert saved["source"] == "gmgn_telegram"
+        assert saved["raw_text"] == "raw alert"
 
     async def test_pair_below_liquidity_threshold_is_dropped(self):
         """A pair with liquidity < prefilter_min_liquidity_usd must be dropped."""

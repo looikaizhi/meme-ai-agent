@@ -228,6 +228,46 @@ def test_build_discovery_returns_feed_and_discoverer(cfg):
     assert hasattr(feed, "run") and hasattr(feed, "recent_mints")
 
 
+def test_build_discovery_adds_gmgn_feed_when_enabled(cfg):
+    from memedog.app_factory import build_discovery
+    from memedog.discovery.gmgn_telegram import GMGNTelegramFeed
+
+    cfg2 = cfg.model_copy(
+        update={
+            "discovery": cfg.discovery.model_copy(update={"gmgn_enabled": True}),
+            "settings": cfg.settings.model_copy(
+                update={
+                    "telegram_api_id": 12345,
+                    "telegram_api_hash": "telegram-api-hash",
+                    "telegram_session": "test-session",
+                }
+            ),
+        }
+    )
+
+    feed, _discoverer = build_discovery(cfg2)
+
+    assert any(isinstance(subfeed, GMGNTelegramFeed) for subfeed in feed._feeds)
+
+
+def test_build_discovery_skips_gmgn_without_user_client_credentials(cfg):
+    from memedog.app_factory import build_discovery
+    from memedog.discovery.gmgn_telegram import GMGNTelegramFeed
+
+    cfg2 = cfg.model_copy(
+        update={
+            "discovery": cfg.discovery.model_copy(update={"gmgn_enabled": True}),
+            "settings": cfg.settings.model_copy(
+                update={"telegram_api_id": None, "telegram_api_hash": None}
+            ),
+        }
+    )
+
+    feed, _discoverer = build_discovery(cfg2)
+
+    assert not any(isinstance(subfeed, GMGNTelegramFeed) for subfeed in feed._feeds)
+
+
 def test_production_orchestrator_exposes_feed(cfg, store):
     from memedog.app_factory import build_orchestrator
 

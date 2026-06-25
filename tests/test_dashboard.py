@@ -26,3 +26,16 @@ def test_format_event_row_handles_empty_symbol():
     })
     assert "scan" in row.lower()
     assert "5 candidates" in row
+
+
+def test_format_addr_compacts_long_address():
+    from dashboard.app import format_addr
+
+    assert format_addr("123456789ABCDEFGHJKLM") == "12345678...GHJKLM"
+
+
+def test_format_addr_keeps_short_or_empty_address():
+    from dashboard.app import format_addr
+
+    assert format_addr("SHORT") == "SHORT"
+    assert format_addr("") == ""

@@ -30,3 +30,15 @@ def test_ttl_expiry_drops_old_entries():
     now[0] = 1061.0
     b.add("NEW")
     assert b.recent() == ["NEW"]
+
+
+def test_metadata_roundtrip_and_expiry():
+    now = [1000.0]
+    b = MintBuffer(ttl_sec=60, clock=lambda: now[0])
+    b.add("A", source="gmgn", author="AUTH")
+    assert b.metadata("A") == {"source": "gmgn", "author": "AUTH"}
+    b.add("A", raw_text="hello")
+    assert b.metadata("A") == {"source": "gmgn", "author": "AUTH", "raw_text": "hello"}
+    now[0] = 1061.0
+    assert b.recent() == []
+    assert b.metadata("A") == {}

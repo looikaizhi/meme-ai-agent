@@ -11,7 +11,7 @@ Public API:
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from memedog.clients.dexscreener import DexScreenerClient
 from memedog.clients.helius import HeliusClient
@@ -22,6 +22,7 @@ from memedog.config.settings import Config
 from memedog.discovery.buffer import MintBuffer
 from memedog.discovery.composite import CompositeFeed
 from memedog.discovery.discoverer import MigrationDiscoverer
+from memedog.discovery.gmgn_telegram import GMGNTelegramFeed
 from memedog.discovery.helius_feed import HeliusMigrationFeed
 from memedog.discovery.pumpportal import PumpPortalFeed
 from memedog.enricher.enricher import Enricher
@@ -36,7 +37,12 @@ from memedog.store import Store
 logger = logging.getLogger(__name__)
 
 
-def build_discovery(cfg: Config, dex_client: DexScreenerClient | None = None):
+def build_discovery(
+    cfg: Config,
+    dex_client: DexScreenerClient | None = None,
+    store: Store | None = None,
+    author_resolver: Callable[[str], Awaitable[str | None]] | None = None,
+):
     """Build the realtime discovery feed and Scanner adapter."""
     discovery = cfg.discovery
     buffer = MintBuffer(ttl_sec=discovery.buffer_ttl_min * 60)
@@ -60,6 +66,37 @@ def build_discovery(cfg: Config, dex_client: DexScreenerClient | None = None):
                 backoff_max=discovery.reconnect_backoff_max_sec,
             )
         )
+
+    if discovery.gmgn_enabled:
+        api_id = cfg.settings.telegram_api_id
+        api_hash = cfg.settings.telegram_api_hash
+        if cfg.scanner.chain != discovery.gmgn_chain:
+            logger.warning(
+                "GMGN discovery skipped: scanner.chain=%s but gmgn_chain=%s",
+                cfg.scanner.chain,
+                discovery.gmgn_chain,
+            )
+        elif not api_id or not api_hash:
+            logger.warning(
+                "GMGN discovery skipped: TELEGRAM_API_ID/TELEGRAM_API_HASH missing"
+            )
+        else:
+            feeds.append(
+                GMGNTelegramFeed(
+                    buffer,
+                    api_id=api_id,
+                    api_hash=api_hash,
+                    session=cfg.settings.telegram_session or "memedog_gmgn",
+                    chat=discovery.gmgn_chats or discovery.gmgn_chat,
+                    store=store,
+                    author_resolver=author_resolver,
+                    backoff_initial=discovery.reconnect_backoff_initial_sec,
+                    backoff_max=discovery.reconnect_backoff_max_sec,
+                    backfill_limit=discovery.gmgn_backfill_limit,
+                    max_open_age_min=discovery.gmgn_max_open_age_min,
+                    launch_only=True,
+                )
+            )
 
     feed = CompositeFeed(feeds, buffer=buffer)
     dex = dex_client if dex_client is not None else DexScreenerClient()
@@ -118,9 +155,23 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
         )
 
     dex_client = DexScreenerClient(**_http_kwargs("dexscreener"))
-    feed, discoverer = build_discovery(cfg, dex_client=dex_client)
-
     rugcheck_client = RugCheckClient(**_http_kwargs("rugcheck"))
+
+    async def _resolve_creator(mint: str) -> str | None:
+        try:
+            report = await rugcheck_client.get_token_report(mint)
+        except Exception as exc:
+            logger.debug("GMGN creator lookup failed for mint=%s: %s", mint, exc)
+            return None
+        creator = report.get("creator")
+        return creator if isinstance(creator, str) and creator else None
+
+    feed, discoverer = build_discovery(
+        cfg,
+        dex_client=dex_client,
+        store=store,
+        author_resolver=_resolve_creator,
+    )
 
     helius_api_key: str = cfg.settings.helius_api_key or ""
     helius_client = HeliusClient(api_key=helius_api_key, **_http_kwargs("helius"))
@@ -131,7 +182,7 @@ def build_orchestrator(cfg: Config, store: Store, demo: bool = False) -> Orchest
     # -----------------------------------------------------------------------
     # Pipeline modules
     # -----------------------------------------------------------------------
-    scanner = Scanner(client=discoverer, cfg=cfg.scanner)
+    scanner = Scanner(client=discoverer, cfg=cfg.scanner, store=store)
 
     hardfilter = HardFilter(rugcheck=rugcheck_client, cfg=cfg.hardfilter)
 

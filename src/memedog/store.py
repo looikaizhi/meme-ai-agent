@@ -110,6 +110,36 @@ CREATE TABLE IF NOT EXISTS pipeline_events (
 );
 """
 
+_CREATE_DISCOVERY_ALERTS = """
+CREATE TABLE IF NOT EXISTS discovery_alerts (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts        TEXT NOT NULL,
+    source    TEXT NOT NULL,
+    mint      TEXT NOT NULL,
+    author    TEXT NOT NULL DEFAULT '',
+    lp_address TEXT NOT NULL DEFAULT '',
+    raw_text  TEXT NOT NULL DEFAULT ''
+);
+"""
+
+_CREATE_SCANNER_CANDIDATES = """
+CREATE TABLE IF NOT EXISTS scanner_candidates (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts             TEXT NOT NULL,
+    source         TEXT NOT NULL,
+    mint           TEXT NOT NULL,
+    author         TEXT NOT NULL DEFAULT '',
+    pair_address   TEXT NOT NULL,
+    symbol         TEXT NOT NULL,
+    chain          TEXT NOT NULL,
+    liquidity_usd  REAL NOT NULL,
+    volume_5m      REAL NOT NULL,
+    fdv_usd        REAL NOT NULL,
+    price_usd      REAL NOT NULL,
+    trace_id       TEXT NOT NULL,
+    raw_text       TEXT NOT NULL DEFAULT ''
+);
+"""
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -153,7 +183,16 @@ class Store:
         cur.execute(_CREATE_SNAPSHOTS)
         cur.execute(_CREATE_FUNNEL_EVENTS)
         cur.execute(_CREATE_PIPELINE_EVENTS)
+        cur.execute(_CREATE_DISCOVERY_ALERTS)
+        cur.execute(_CREATE_SCANNER_CANDIDATES)
+        self._ensure_column("discovery_alerts", "lp_address", "TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
+
+    def _ensure_column(self, table: str, column: str, ddl: str) -> None:
+        cur = self._conn.execute(f"PRAGMA table_info({table})")
+        existing = {row["name"] for row in cur.fetchall()}
+        if column not in existing:
+            self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     # ------------------------------------------------------------------
     # Positions
@@ -479,6 +518,123 @@ class Store:
                     "symbol": row["symbol"],
                     "status": row["status"],
                     "detail": row["detail"],
+                }
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # Discovery alerts (raw external source proof stream)
+    # ------------------------------------------------------------------
+
+    def save_discovery_alert(
+        self,
+        *,
+        source: str,
+        mint: str,
+        author: str = "",
+        liquidity_pool: str = "",
+        raw_text: str = "",
+        ts: "datetime | None" = None,
+    ) -> None:
+        """Append one raw discovery alert row."""
+        if ts is None:
+            ts = datetime.now(tz=timezone.utc)
+        self._conn.execute(
+            """
+            INSERT INTO discovery_alerts (ts, source, mint, author, lp_address, raw_text)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (_dt_to_str(ts), source, mint, author, liquidity_pool, raw_text),
+        )
+        self._conn.commit()
+
+    def recent_discovery_alerts(self, limit: int = 50) -> list[dict]:
+        """Return the most recent raw discovery alerts, newest first."""
+        cur = self._conn.execute(
+            "SELECT * FROM discovery_alerts ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        result = []
+        for row in cur.fetchall():
+            result.append(
+                {
+                    "ts": _str_to_dt(row["ts"]),
+                    "source": row["source"],
+                    "mint": row["mint"],
+                    "author": row["author"],
+                    "creator_address": row["author"],
+                    "liquidity_pool_address": row["lp_address"],
+                    "raw_text": row["raw_text"],
+                }
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # Scanner-passed candidates
+    # ------------------------------------------------------------------
+
+    def save_scanner_candidate(
+        self,
+        *,
+        candidate,
+        source: str = "",
+        raw_text: str = "",
+        ts: "datetime | None" = None,
+    ) -> None:
+        """Append one candidate that passed Scanner's DexScreener prefilter.
+
+        ``candidate.pair_address`` is the liquidity pool / pair address.
+        """
+        if ts is None:
+            ts = datetime.now(tz=timezone.utc)
+        self._conn.execute(
+            """
+            INSERT INTO scanner_candidates
+              (ts, source, mint, author, pair_address, symbol, chain,
+               liquidity_usd, volume_5m, fdv_usd, price_usd, trace_id, raw_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _dt_to_str(ts),
+                source,
+                candidate.mint,
+                "",
+                candidate.pair_address,
+                candidate.symbol,
+                candidate.chain,
+                candidate.liquidity_usd,
+                candidate.volume_5m,
+                candidate.fdv_usd,
+                candidate.price_usd,
+                candidate.trace_id,
+                raw_text,
+            ),
+        )
+        self._conn.commit()
+
+    def recent_scanner_candidates(self, limit: int = 50) -> list[dict]:
+        """Return candidates that passed Scanner, newest first."""
+        cur = self._conn.execute(
+            "SELECT * FROM scanner_candidates ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        result = []
+        for row in cur.fetchall():
+            result.append(
+                {
+                    "ts": _str_to_dt(row["ts"]),
+                    "source": row["source"],
+                    "mint": row["mint"],
+                    "pair_address": row["pair_address"],
+                    "liquidity_pool_address": row["pair_address"],
+                    "symbol": row["symbol"],
+                    "chain": row["chain"],
+                    "liquidity_usd": row["liquidity_usd"],
+                    "volume_5m": row["volume_5m"],
+                    "fdv_usd": row["fdv_usd"],
+                    "price_usd": row["price_usd"],
+                    "trace_id": row["trace_id"],
+                    "raw_text": row["raw_text"],
                 }
             )
         return result

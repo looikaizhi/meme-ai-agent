@@ -483,3 +483,92 @@ class TestPipelineEvents:
             s.close()
         assert len(events) == 3
         assert events[0]["detail"] == "9"  # newest
+
+
+class TestDiscoveryAlerts:
+    def test_save_and_recent_discovery_alerts_roundtrip(self, tmp_path):
+        from datetime import datetime
+        from memedog.store import Store
+
+        s = Store(str(tmp_path / "alerts.db"))
+        try:
+            s.save_discovery_alert(
+                source="gmgn_telegram",
+                mint="MINT_A",
+                author="AUTHOR_A",
+                liquidity_pool="LP_A",
+                raw_text="CA: MINT_A\nAuthor: AUTHOR_A",
+            )
+            s.save_discovery_alert(
+                source="gmgn_telegram",
+                mint="MINT_B",
+                author="AUTHOR_B",
+                liquidity_pool="LP_B",
+                raw_text="CA: MINT_B\nAuthor: AUTHOR_B",
+            )
+            alerts = s.recent_discovery_alerts(limit=10)
+        finally:
+            s.close()
+
+        assert len(alerts) == 2
+        assert alerts[0]["mint"] == "MINT_B"
+        assert alerts[0]["author"] == "AUTHOR_B"
+        assert alerts[0]["creator_address"] == "AUTHOR_B"
+        assert alerts[0]["liquidity_pool_address"] == "LP_B"
+        assert alerts[0]["source"] == "gmgn_telegram"
+        assert alerts[0]["raw_text"] == "CA: MINT_B\nAuthor: AUTHOR_B"
+        assert isinstance(alerts[0]["ts"], datetime)
+
+    def test_recent_discovery_alerts_limit(self, tmp_path):
+        from memedog.store import Store
+
+        s = Store(str(tmp_path / "alerts_limit.db"))
+        try:
+            for i in range(5):
+                s.save_discovery_alert(source="gmgn_telegram", mint=f"MINT_{i}")
+            alerts = s.recent_discovery_alerts(limit=2)
+        finally:
+            s.close()
+
+        assert [alert["mint"] for alert in alerts] == ["MINT_4", "MINT_3"]
+
+
+class TestScannerCandidates:
+    def test_save_and_recent_scanner_candidates_roundtrip(self, tmp_path):
+        from datetime import datetime
+        from memedog.store import Store
+
+        candidate = _make_snapshot(mint="MINT_PASS").candidate
+        s = Store(str(tmp_path / "scanner_candidates.db"))
+        try:
+            s.save_scanner_candidate(
+                candidate=candidate,
+                source="gmgn_telegram",
+                raw_text="raw alert",
+            )
+            rows = s.recent_scanner_candidates(limit=10)
+        finally:
+            s.close()
+
+        assert len(rows) == 1
+        assert rows[0]["mint"] == "MINT_PASS"
+        assert rows[0]["source"] == "gmgn_telegram"
+        assert rows[0]["pair_address"] == candidate.pair_address
+        assert rows[0]["liquidity_pool_address"] == candidate.pair_address
+        assert rows[0]["liquidity_usd"] == candidate.liquidity_usd
+        assert rows[0]["raw_text"] == "raw alert"
+        assert isinstance(rows[0]["ts"], datetime)
+
+    def test_recent_scanner_candidates_limit(self, tmp_path):
+        from memedog.store import Store
+
+        s = Store(str(tmp_path / "scanner_candidates_limit.db"))
+        try:
+            for i in range(5):
+                candidate = _make_snapshot(mint=f"MINT_{i}").candidate
+                s.save_scanner_candidate(candidate=candidate, source="gmgn")
+            rows = s.recent_scanner_candidates(limit=2)
+        finally:
+            s.close()
+
+        assert [row["mint"] for row in rows] == ["MINT_4", "MINT_3"]

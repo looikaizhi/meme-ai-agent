@@ -140,20 +140,6 @@ class TestLoadConfig:
             cfg.settings.helius_api_key, str
         )
 
-    def test_playbook_access_key_aliases(self, monkeypatch):
-        from memedog.config.settings import Settings
-
-        monkeypatch.setenv("PLAYBOOK_API_KEY", "playbook-test-key")
-        settings = Settings()
-        assert settings.bitget_playbook_access_key == "playbook-test-key"
-
-    def test_playbook_access_key_supports_bitget_api_key_alias(self, monkeypatch):
-        from memedog.config.settings import Settings
-
-        monkeypatch.setenv("BITGET_API_KEY", "bitget-api-key")
-        settings = Settings()
-        assert settings.bitget_playbook_access_key == "bitget-api-key"
-
     def test_papertrader_values_match_yaml(self):
         """Papertrader numeric values must equal thresholds.yaml."""
         from memedog.config.settings import load_config
@@ -269,6 +255,15 @@ class TestDiscoveryConfig:
         assert cfg.discovery.pumpportal_ws_url.startswith("wss://")
         assert isinstance(cfg.discovery.helius_enabled, bool)
         assert cfg.discovery.buffer_ttl_min > 0
+        assert isinstance(cfg.discovery.gmgn_enabled, bool)
+        assert cfg.discovery.gmgn_chain == "solana"
+        assert cfg.discovery.gmgn_chat
+        assert cfg.discovery.gmgn_chats
+        assert "2122751413" in cfg.discovery.gmgn_chats
+        assert "2115686230" not in cfg.discovery.gmgn_chats
+        assert "gmgnsignals" not in cfg.discovery.gmgn_chats
+        assert cfg.discovery.gmgn_backfill_limit > 0
+        assert cfg.discovery.gmgn_max_open_age_min > 0
         assert cfg.discovery.reconnect_backoff_initial_sec > 0
         assert (
             cfg.discovery.reconnect_backoff_max_sec
@@ -281,3 +276,14 @@ class TestDiscoveryConfig:
 
         cfg = load_config()
         assert cfg.scanner.min_pair_age_min == 0
+
+    def test_telegram_user_client_settings_exist(self, monkeypatch):
+        from memedog.config.settings import Settings
+
+        monkeypatch.setenv("TELEGRAM_API_ID", "12345")
+        monkeypatch.setenv("TELEGRAM_API_HASH", "telegram-api-hash")
+        monkeypatch.setenv("TELEGRAM_SESSION", "gmgn-session")
+        settings = Settings()
+        assert settings.telegram_api_id == 12345
+        assert settings.telegram_api_hash == "telegram-api-hash"
+        assert settings.telegram_session == "gmgn-session"

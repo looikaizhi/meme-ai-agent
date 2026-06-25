@@ -14,3 +14,9 @@ class MigrationDiscoverer:
 
     async def get_token_pairs(self, mint: str) -> list[dict]:
         return await self._dex.get_token_pairs(mint)
+
+    def get_token_metadata(self, mint: str) -> dict:
+        metadata = getattr(self._feed, "metadata", None)
+        if callable(metadata):
+            return metadata(mint)
+        return {}

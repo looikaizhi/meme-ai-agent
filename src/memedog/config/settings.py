@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_YAML = Path(__file__).parent / "thresholds.yaml"
@@ -162,6 +162,12 @@ class DiscoveryConfig(BaseModel):
     buffer_ttl_min: int = 20
     reconnect_backoff_initial_sec: float = 1.0
     reconnect_backoff_max_sec: float = 30.0
+    gmgn_enabled: bool = False
+    gmgn_chain: Literal["solana"] = "solana"
+    gmgn_chat: str = "solnewlp"
+    gmgn_chats: list[str | int] = []
+    gmgn_backfill_limit: int = 10
+    gmgn_max_open_age_min: int = 30
 
 
 # ---------------------------------------------------------------------------
@@ -182,15 +188,9 @@ class Settings(BaseSettings):
     deepseek_api_key: Optional[str] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
-    bitget_playbook_access_key: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "BITGET_PLAYBOOK_ACCESS_KEY",
-            "PLAYBOOK_API_KEY",
-            "BITGET_API_KEY",
-            "BITGET_ACCESS_KEY",
-        ),
-    )
+    telegram_api_id: Optional[int] = None
+    telegram_api_hash: Optional[str] = None
+    telegram_session: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
