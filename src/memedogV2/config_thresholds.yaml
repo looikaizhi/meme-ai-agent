@@ -5,6 +5,7 @@ gmgn:
   intake_drain_rps: 0.5        # placeholder — Telegram intake drain pacing (not wired yet)
   on_failure: pass_flagged     # drop | pass_flagged
   on_429: suspend_until_reset  # placeholder — GmgnCli raises RateLimitBanned; orchestrator skips
+  max_retries: 2               # bounded retry for transient (non-429) gmgn errors (audit H-1)
 hardfilter:
   max_top10_rate: 0.35         # 0-1 fraction (35%)
   max_creator_rate: 0.10

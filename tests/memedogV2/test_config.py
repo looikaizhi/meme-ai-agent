@@ -37,3 +37,4 @@ def test_packaged_default_thresholds_load():
               "min_volume_5m", "min_buy_sell_ratio_5m", "max_fdv_to_liquidity"):
         assert k in cfg.hardfilter
     assert cfg.gmgn["on_failure"] in ("drop", "pass_flagged")
+    assert cfg.gmgn["max_retries"] >= 1
