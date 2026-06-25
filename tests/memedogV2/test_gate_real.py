@@ -23,10 +23,12 @@ from memedogV2.sources.rugcheck_source import RugCheckSource
 
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 
-# A pinned (CA, LP) that currently passes hardfilter. Filled during real
-# validation (Task 11); the dynamic finder is the primary path.
-PINNED_CA = ""
-PINNED_LP = ""
+# A pinned (CA, LP) that passed hardfilter at validation time (2026-06-25, "Merlin",
+# liq ~$57k, top10 27%). Fresh memecoins die fast, so the pipeline gate below
+# SKIPS LOUDLY if this token no longer passes (rather than failing) — refresh it
+# via the trending screener when it dies.
+PINNED_CA = "AvxFBjWydMYWD7C8pHzSkGxNYAFWr7aNBbAKm84bpump"
+PINNED_LP = "CQCiNRqQohijwKxxHvTzbpFvpKNFWtxeshCWqEJrgbEB"
 
 
 def _need(cond, why):
@@ -77,6 +79,11 @@ async def test_gate_real_pipeline():
     runner = HarnessRunner(resolver=_resolver(), backend=build_backend("deepseek"),
                            hardfilter_cfg=cfg.hardfilter)
     run = await runner.run(PINNED_CA, PINNED_LP)
+    # real multi-source fetch happened and is recorded
     assert any(s.name == "read_facts" and s.tool_calls for s in run.steps)
-    assert run.final_signal is not None       # token was selected because it passes
+    # the pinned token may have died since validation (liquidity drained / LP changed);
+    # if it no longer reaches the audit, skip loudly rather than fail.
+    judge_ran = any(s.name == "judge" and s.status.value in ("ok", "degraded") for s in run.steps)
+    _need(judge_ran, f"pinned token {PINNED_CA[:8]} no longer passes hardfilter (likely died) — refresh it")
+    assert run.final_signal is not None
     assert run.final_signal.signal.value in ("BULLISH", "BEARISH", "NEUTRAL")
