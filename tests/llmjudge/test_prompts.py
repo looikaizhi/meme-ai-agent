@@ -7,11 +7,13 @@ from memedog.models import (
     DimensionScore,
     HolderInfo,
     MomentumInfo,
+    NarrativeInfo,
     SafetyInfo,
     Score,
     SocialInfo,
     TokenCandidate,
     TokenSnapshot,
+    WalletInfo,
 )
 from memedog.llmjudge.prompts import (
     bear_prompt,
@@ -323,3 +325,58 @@ def test_judge_prompt_places_evidence_before_debate_and_baseline_before_debate(s
     assert user_text.index("=== EVIDENCE") < user_text.index("RULE BASELINE")
     assert user_text.index("RULE BASELINE") < user_text.index("=== BULL ARGUMENT")
     assert user_text.index("=== BULL ARGUMENT") < user_text.index("=== BEAR ARGUMENT")
+
+
+# ---------------------------------------------------------------------------
+# Task 9: narrative + smart-money consensus tests
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_includes_narrative_and_consensus(candidate, score):
+    """NARRATIVE row must appear and smart-money consensus fields must be rendered."""
+    snap = TokenSnapshot(
+        candidate=candidate,
+        safety=SafetyInfo(available=True, rug_trust_score=90),
+        holders=HolderInfo(available=True, top10_pct=25.0),
+        momentum=MomentumInfo(available=True, liquidity_usd=50000.0, volume_5m=2000.0),
+        social=SocialInfo(
+            available=True,
+            smart_money_distinct_wallets=2,
+            smart_money_top_tier="S",
+            smart_money_buyers=[WalletInfo(address="AAAAAA", label="kol", tier="S")],
+            has_twitter=True,
+            has_telegram=True,
+            has_website=True,
+            socials_count=3,
+        ),
+        narrative=NarrativeInfo(
+            available=True,
+            category="animal",
+            matched_keywords=["dog"],
+            meme_collision=["bonk"],
+            summary="狗系 meme",
+        ),
+        enriched_at=candidate.pair_created_at,
+    )
+    msgs = judge_prompt(snap, score, "bull", "bear")
+    text = msgs[-1]["content"]
+    assert ("NARRATIVE" in text) or ("叙事" in text)
+    assert "聪明钱" in text  # consensus fields surfaced
+
+
+def test_evidence_narrative_missing_renders_data_missing(candidate, score):
+    """When narrative is unavailable, the NARRATIVE row should show DATA MISSING."""
+    snap = TokenSnapshot(
+        candidate=candidate,
+        safety=SafetyInfo(available=True, rug_trust_score=80),
+        holders=HolderInfo(available=True, top10_pct=20.0),
+        momentum=MomentumInfo(available=True, liquidity_usd=30000.0),
+        social=SocialInfo(available=False),
+        narrative=NarrativeInfo(available=False),
+        enriched_at=candidate.pair_created_at,
+    )
+    msgs = judge_prompt(snap, score, "b", "b")
+    text = msgs[-1]["content"]
+    assert ("NARRATIVE" in text) or ("叙事" in text)
+    # Should show DATA MISSING since narrative is unavailable
+    assert "DATA MISSING" in text.upper() or "缺失" in text

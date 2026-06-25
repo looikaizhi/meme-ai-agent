@@ -5,9 +5,11 @@ from memedog.models.signal import Signal, SignalType
 from memedog.models.snapshot import (
     HolderInfo,
     MomentumInfo,
+    NarrativeInfo,
     SafetyInfo,
     SocialInfo,
     TokenSnapshot,
+    WalletInfo,
 )
 from memedog.models.trade import Position, TradeRecord
 
@@ -18,6 +20,8 @@ __all__ = [
     "MomentumInfo",
     "SocialInfo",
     "TokenSnapshot",
+    "WalletInfo",
+    "NarrativeInfo",
     "DimensionScore",
     "Score",
     "SignalType",

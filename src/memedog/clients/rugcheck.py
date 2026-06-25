@@ -23,10 +23,10 @@ parse_report output keys (always present; missing source fields → None):
   mint_authority_revoked   → mintAuthority is None
   freeze_authority_revoked → freezeAuthority is None
   lp_burned_or_locked      → any market's lp.lpLockedPct >= 90
-  top10_pct                → sum of pct for first 10 topHolders
-  max_wallet_pct           → max(pct) across all topHolders
+  top10_pct                → sum of pct for first 10 topHolders (excludes knownAccounts AMM accounts)
+  max_wallet_pct           → max(pct) across topHolders (excludes knownAccounts AMM accounts)
   dev_pct                  → creatorBalance / token.supply * 100
-  sniper_pct               → sum of pct for topHolders where insider=True
+  sniper_pct               → sum of pct for insider=True topHolders (excludes knownAccounts AMM accounts)
   trust_score              → 0–100 SAFETY score = clamp(100 - score_normalised, 0, 100)
   risk_level               → "CRITICAL"/"HIGH"/"MEDIUM"/"LOW" derived from rugged + score_normalised
 """
@@ -53,6 +53,22 @@ class RugCheckClient(BaseHTTPClient):
         Raises DataSourceError on non-2xx or network failure.
         """
         return await self.get_json(f"/v1/tokens/{mint}/report")
+
+
+def _amm_accounts(report: dict) -> set[str]:
+    """Addresses flagged by RugCheck knownAccounts as AMM/LP pool accounts.
+
+    Returns an empty set when knownAccounts is missing or malformed (the parser
+    then degrades to counting all holders — old behaviour, no crash).
+    """
+    known = report.get("knownAccounts")
+    if not isinstance(known, dict):
+        return set()
+    return {
+        addr
+        for addr, meta in known.items()
+        if isinstance(meta, dict) and meta.get("type") == "AMM"
+    }
 
 
 def parse_report(report: dict) -> dict:
@@ -88,23 +104,31 @@ def parse_report(report: dict) -> dict:
             for m in markets
         )
 
-    # --- holder metrics ---
-    top_holders = report.get("topHolders")
+    # --- holder metrics (AMM/LP pool accounts excluded) ---
+    raw_holders = report.get("topHolders")
+    amm = _amm_accounts(report)
+    if raw_holders is None:
+        holders: Optional[list] = None
+    else:
+        holders = [
+            h
+            for h in raw_holders
+            if h.get("address") not in amm and h.get("owner") not in amm
+        ]
 
-    # top10_pct: sum of first 10 holders' pct
-    # Note: may include AMM/LP accounts — acceptable for MVP.
+    # top10_pct: sum of first 10 NON-AMM holders' pct
     top10_pct: Optional[float]
-    if top_holders is None:
+    if not holders:  # None or emptied-by-exclusion → cannot assess
         top10_pct = None
     else:
-        top10_pct = sum(h.get("pct", 0.0) for h in top_holders[:10])
+        top10_pct = sum(h.get("pct", 0.0) for h in holders[:10])
 
-    # max_wallet_pct: largest single holder pct (from topHolders list)
+    # max_wallet_pct: largest single NON-AMM holder pct
     max_wallet_pct: Optional[float]
-    if top_holders is None or len(top_holders) == 0:
+    if not holders:
         max_wallet_pct = None
     else:
-        max_wallet_pct = max(h.get("pct", 0.0) for h in top_holders)
+        max_wallet_pct = max(h.get("pct", 0.0) for h in holders)
 
     # dev_pct: creator's share = creatorBalance / token.supply * 100
     dev_pct: Optional[float]
@@ -116,13 +140,14 @@ def parse_report(report: dict) -> dict:
     else:
         dev_pct = None
 
-    # sniper_pct: sum of pct for holders flagged as insider=True
-    # (proxy for insider/sniper accumulation; BONK → 0.0)
+    # sniper_pct: sum of pct for NON-AMM holders flagged insider=True
     sniper_pct: Optional[float]
-    if top_holders is None:
+    if not holders:  # None or emptied-by-exclusion → cannot assess
         sniper_pct = None
     else:
-        sniper_pct = sum(h.get("pct", 0.0) for h in top_holders if h.get("insider") is True)
+        sniper_pct = sum(
+            h.get("pct", 0.0) for h in holders if h.get("insider") is True
+        )
 
     # --- trust score and risk level ---
     # score_normalised is a RISK score (higher = MORE risky).

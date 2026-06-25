@@ -14,7 +14,13 @@ from memedog.models import (
     Score,
 )
 from memedog.models.candidate import TokenCandidate
-from memedog.config.settings import ScoringConfig, ScoringHoldersConfig, ScoringMomentumConfig, ScoringSocialConfig
+from memedog.config.settings import (
+    ScoringConfig,
+    ScoringHoldersConfig,
+    ScoringMomentumConfig,
+    ScoringSocialConfig,
+    ScoringNarrativeConfig,
+)
 from memedog.scoring.engine import ScoreEngine
 
 
@@ -25,7 +31,7 @@ from memedog.scoring.engine import ScoreEngine
 @pytest.fixture
 def scoring_cfg() -> ScoringConfig:
     return ScoringConfig(
-        weights={"safety": 0.35, "holders": 0.25, "momentum": 0.25, "social": 0.15},
+        weights={"safety": 0.30, "holders": 0.25, "momentum": 0.30, "social": 0.10, "narrative": 0.05},
         holders=ScoringHoldersConfig(
             top10_full_score_at=15,
             top10_zero_score_at=50,
@@ -41,6 +47,10 @@ def scoring_cfg() -> ScoringConfig:
             smart_money_full_at=10,
             twitter_growth_full_at=2.0,
             twitter_growth_zero_at=-1.0,
+        ),
+        narrative=ScoringNarrativeConfig(
+            category_scores={"animal": 70, "ai": 65, "political": 60, "culture": 55, "finance_utility": 35, "unknown": 40},
+            meme_collision_bonus=10,
         ),
         missing_dimension_weight_factor=0.5,
         neutral_score=50.0,
@@ -140,16 +150,16 @@ class TestScoreEngineFull:
         result = engine.score(snapshot)
         assert 0.0 <= result.total <= 100.0
 
-    def test_exactly_four_dimensions(self, engine):
+    def test_exactly_five_dimensions(self, engine):
         snapshot = _make_full_snapshot()
         result = engine.score(snapshot)
-        assert len(result.dimensions) == 4
+        assert len(result.dimensions) == 5
 
     def test_dimension_names_are_correct_set(self, engine):
         snapshot = _make_full_snapshot()
         result = engine.score(snapshot)
         names = {d.name for d in result.dimensions}
-        assert names == {"safety", "holders", "momentum", "social"}
+        assert names == {"safety", "holders", "momentum", "social", "narrative"}
 
     def test_weights_sum_to_one_all_available(self, engine):
         snapshot = _make_full_snapshot()
@@ -209,9 +219,9 @@ class TestScoreEngineMissingDimension:
         social = next(d for d in result.dimensions if d.name == "social")
         assert social.raw == pytest.approx(scoring_cfg.neutral_score)
 
-    def test_four_dimensions_still_returned(self, engine):
+    def test_five_dimensions_still_returned(self, engine):
         result = engine.score(self._snapshot_social_unavailable())
-        assert len(result.dimensions) == 4
+        assert len(result.dimensions) == 5
 
 
 # ---------------------------------------------------------------------------
@@ -268,12 +278,14 @@ class TestScoreEngineEdgeCases:
 
     def test_all_dimensions_unavailable_total_equals_neutral(self, engine, scoring_cfg):
         """When every dimension is unavailable, total should equal neutral_score."""
+        from memedog.models import NarrativeInfo
         snapshot = TokenSnapshot(
             candidate=_make_candidate(),
             safety=SafetyInfo(available=False),
             holders=HolderInfo(available=False),
             momentum=MomentumInfo(available=False),
             social=SocialInfo(available=False),
+            narrative=NarrativeInfo(available=False),
             enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         )
         result = engine.score(snapshot)
@@ -296,6 +308,7 @@ class TestScoreEngineDivisionByZeroGuard:
             holders=scoring_cfg.holders,
             momentum=scoring_cfg.momentum,
             social=scoring_cfg.social,
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=0.0,  # kills all effective weights
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -319,6 +332,7 @@ class TestScoreEngineDivisionByZeroGuard:
             holders=scoring_cfg.holders,
             momentum=scoring_cfg.momentum,
             social=scoring_cfg.social,
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=0.0,
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -341,6 +355,7 @@ class TestScoreEngineDivisionByZeroGuard:
             holders=scoring_cfg.holders,
             momentum=scoring_cfg.momentum,
             social=scoring_cfg.social,
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=0.0,
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -357,12 +372,14 @@ class TestScoreEngineDivisionByZeroGuard:
         assert sum(d.weight for d in result.dimensions) == pytest.approx(1.0, abs=1e-9)
 
     def test_all_dims_unavailable_factor_zero_equal_weights(self, scoring_cfg):
-        """Fallback must assign equal weight 0.25 to each of the 4 dimensions."""
+        """Fallback must assign equal weight 0.20 to each of the 5 dimensions."""
+        from memedog.models import NarrativeInfo
         zero_factor_cfg = ScoringConfig(
             weights=scoring_cfg.weights,
             holders=scoring_cfg.holders,
             momentum=scoring_cfg.momentum,
             social=scoring_cfg.social,
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=0.0,
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -373,11 +390,12 @@ class TestScoreEngineDivisionByZeroGuard:
             holders=HolderInfo(available=False),
             momentum=MomentumInfo(available=False),
             social=SocialInfo(available=False),
+            narrative=NarrativeInfo(available=False),
             enriched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         )
         result = engine.score(snapshot)
         for d in result.dimensions:
-            assert d.weight == pytest.approx(0.25, abs=1e-9)
+            assert d.weight == pytest.approx(0.20, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -390,10 +408,11 @@ class TestScoreEngineWeightsValidation:
     def test_missing_one_key_raises_value_error(self, scoring_cfg):
         """Omitting 'social' from weights must raise ValueError at construction."""
         bad_cfg = ScoringConfig(
-            weights={"safety": 0.40, "holders": 0.35, "momentum": 0.25},  # missing social
+            weights={"safety": 0.40, "holders": 0.30, "momentum": 0.25, "narrative": 0.05},  # missing social
             holders=scoring_cfg.holders,
             momentum=scoring_cfg.momentum,
             social=scoring_cfg.social,
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -403,10 +422,11 @@ class TestScoreEngineWeightsValidation:
     def test_missing_multiple_keys_raises_value_error(self, scoring_cfg):
         """Omitting multiple keys must also raise ValueError."""
         bad_cfg = ScoringConfig(
-            weights={"safety": 1.0},  # missing holders, momentum, social
+            weights={"safety": 1.0},  # missing holders, momentum, social, narrative
             holders=scoring_cfg.holders,
             momentum=scoring_cfg.momentum,
             social=scoring_cfg.social,
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -414,15 +434,16 @@ class TestScoreEngineWeightsValidation:
             ScoreEngine(bad_cfg)
 
     def test_extra_keys_allowed_no_error(self, scoring_cfg):
-        """Extra keys beyond the required four must not raise."""
+        """Extra keys beyond the required five must not raise."""
         extra_cfg = ScoringConfig(
             weights={
-                "safety": 0.30, "holders": 0.25, "momentum": 0.25, "social": 0.15,
-                "extra_dim": 0.05,
+                "safety": 0.28, "holders": 0.25, "momentum": 0.28, "social": 0.10,
+                "narrative": 0.05, "extra_dim": 0.04,
             },
             holders=scoring_cfg.holders,
             momentum=scoring_cfg.momentum,
             social=scoring_cfg.social,
+            narrative=scoring_cfg.narrative,
             missing_dimension_weight_factor=scoring_cfg.missing_dimension_weight_factor,
             neutral_score=scoring_cfg.neutral_score,
         )
@@ -430,7 +451,21 @@ class TestScoreEngineWeightsValidation:
         engine = ScoreEngine(extra_cfg)
         assert engine is not None
 
-    def test_all_four_keys_present_no_error(self, scoring_cfg):
-        """Exact required four keys must not raise."""
+    def test_all_five_keys_present_no_error(self, scoring_cfg):
+        """Exact required five keys must not raise."""
         engine = ScoreEngine(scoring_cfg)
         assert engine is not None
+
+
+# ---------------------------------------------------------------------------
+# Task 8: narrative dimension in engine
+# ---------------------------------------------------------------------------
+
+def test_engine_includes_narrative_dimension(scoring_cfg):
+    from memedog.scoring.engine import ScoreEngine
+    from memedog.models import TokenSnapshot, NarrativeInfo
+    snap = _make_full_snapshot()
+    # snapshot.narrative defaults to NarrativeInfo() with category=None
+    score = ScoreEngine(scoring_cfg).score(snap)
+    names = {d.name for d in score.dimensions}
+    assert "narrative" in names and len(score.dimensions) == 5

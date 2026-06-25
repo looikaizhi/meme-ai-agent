@@ -49,7 +49,7 @@ class HoldersFilterConfig(BaseModel):
 class MomentumFilterConfig(BaseModel):
     min_liquidity_usd: float
     min_volume_5m: float
-    min_buy_sell_ratio_5m: float
+    min_buy_sell_ratio_floor: float
     max_fdv_to_liquidity: float
 
 
@@ -63,6 +63,7 @@ class HardFilterConfig(BaseModel):
 class EnricherConfig(BaseModel):
     per_provider_timeout_sec: float
     smart_money_wallets_file: str
+    # deprecated: Twitter removed from production path (Phase 1); kept for config compat
     twitter_lookback_min: int
 
 
@@ -87,11 +88,19 @@ class ScoringSocialConfig(BaseModel):
     twitter_growth_zero_at: float
 
 
+class ScoringNarrativeConfig(BaseModel):
+    """Configurable scoring table for the narrative dimension scorer."""
+
+    category_scores: dict[str, float]
+    meme_collision_bonus: float
+
+
 class ScoringConfig(BaseModel):
     weights: dict[str, float]
     holders: ScoringHoldersConfig
     momentum: ScoringMomentumConfig
     social: ScoringSocialConfig
+    narrative: ScoringNarrativeConfig
     missing_dimension_weight_factor: float
     neutral_score: float
 
@@ -182,6 +191,7 @@ class Settings(BaseSettings):
 
     helius_api_key: Optional[str] = None
     rugcheck_api_key: Optional[str] = None
+    # deprecated: Twitter removed from production path (Phase 1); kept for config compat
     twitter_bearer: Optional[str] = None
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None

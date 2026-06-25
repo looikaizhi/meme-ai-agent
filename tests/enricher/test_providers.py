@@ -6,16 +6,19 @@ Tests each provider:
   - success path → fills fields correctly
   - error path  → returns *Info(available=False), never raises
 
-fetch_social partial failure semantics:
-  - twitter fails but smart money ok → available=True with smart_money_buys set
-  - smart money fails but twitter ok → available=True with twitter fields set
-  - both fail → available=False
+fetch_social semantics (Twitter removed from production — Phase 1):
+  - smart-money consensus present → available=True with consensus fields set
+  - smart money None but social metadata present → available=True
+  - no smart money and no social metadata → available=False
 """
 from __future__ import annotations
 
+import asyncio
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
+
+from memedog.models import WalletInfo
 
 # Real fixtures for use in the fetch_safety and fetch_holders real-data tests
 from tests.conftest import load_fixture as _load_fixture
@@ -333,188 +336,281 @@ class TestFetchMomentum:
 
 
 # ---------------------------------------------------------------------------
-# fetch_social
+# fetch_social (new DI-style signature: no Twitter, uses analyze_smart_money)
 # ---------------------------------------------------------------------------
 
 
 class TestFetchSocial:
-    async def test_both_sources_succeed_returns_available(self):
-        """When both helius and twitter succeed, SocialInfo is available."""
+    async def test_smart_money_succeeds_returns_available(self):
+        """When helius analyze_smart_money succeeds, SocialInfo is available."""
         from memedog.enricher.providers import fetch_social
+        from memedog.models import WalletInfo
 
         mock_helius = AsyncMock()
-        mock_helius.count_smart_money_buys = AsyncMock(return_value=3)
-
-        mock_twitter = AsyncMock()
-        mock_twitter.count_mentions = AsyncMock(
-            return_value={"mentions_1h": 150, "growth": 25.0}
+        mock_helius.analyze_smart_money = AsyncMock(
+            return_value={"buys": 3, "distinct_wallets": 2, "buyers": [], "top_tier": "A"}
         )
 
         result = await fetch_social(
-            symbol="DOGE",
             mint="MINT123",
             helius_client=mock_helius,
-            twitter_client=mock_twitter,
-            smart_wallets={"wallet1"},
-            lookback_min=60,
+            smart_wallets={"wallet1": WalletInfo(address="wallet1")},
+            social_platforms=[],
         )
 
         assert result.available is True
         assert result.smart_money_buys == 3
-        assert result.twitter_mentions_1h == 150
-        assert result.twitter_growth == pytest.approx(25.0)
+        assert result.smart_money_distinct_wallets == 2
+        assert result.smart_money_top_tier == "A"
 
-    async def test_twitter_fails_partial_result_still_available(self):
-        """Twitter unavailable but smart money ok → available=True, twitter fields None."""
+    async def test_social_metadata_alone_makes_available(self):
+        """Social metadata (platforms) alone → available=True even if smart money fails."""
         from memedog.enricher.providers import fetch_social
-        from memedog.clients.base import DataSourceError
 
         mock_helius = AsyncMock()
-        mock_helius.count_smart_money_buys = AsyncMock(return_value=2)
-
-        mock_twitter = AsyncMock()
-        mock_twitter.count_mentions = AsyncMock(
-            side_effect=DataSourceError("twitter bearer not configured")
-        )
+        mock_helius.analyze_smart_money = AsyncMock(return_value=None)
 
         result = await fetch_social(
-            symbol="DOGE",
             mint="MINT123",
             helius_client=mock_helius,
-            twitter_client=mock_twitter,
-            smart_wallets={"wallet1"},
-            lookback_min=60,
+            smart_wallets={},
+            social_platforms=["twitter", "telegram"],
         )
 
         assert result.available is True
-        assert result.smart_money_buys == 2
-        assert result.twitter_mentions_1h is None
-        assert result.twitter_growth is None
+        assert result.has_twitter is True
+        assert result.has_telegram is True
+        assert result.smart_money_buys is None
 
-    async def test_smart_money_fails_partial_result_still_available(self):
-        """Helius unavailable but twitter ok → available=True, smart_money_buys None."""
+    async def test_smart_money_raises_partial_result_still_available_via_metadata(self):
+        """Helius raises but social metadata present → available=True, smart money fields None."""
         from memedog.enricher.providers import fetch_social
         from memedog.clients.base import DataSourceError
 
         mock_helius = AsyncMock()
-        mock_helius.count_smart_money_buys = AsyncMock(
+        mock_helius.analyze_smart_money = AsyncMock(
             side_effect=DataSourceError("helius error")
         )
 
-        mock_twitter = AsyncMock()
-        mock_twitter.count_mentions = AsyncMock(
-            return_value={"mentions_1h": 50, "growth": 10.0}
-        )
-
         result = await fetch_social(
-            symbol="DOGE",
             mint="MINT123",
             helius_client=mock_helius,
-            twitter_client=mock_twitter,
-            smart_wallets={"wallet1"},
-            lookback_min=60,
+            smart_wallets={},
+            social_platforms=["twitter"],
         )
 
         assert result.available is True
         assert result.smart_money_buys is None
-        assert result.twitter_mentions_1h == 50
+        assert result.has_twitter is True
 
     async def test_both_sources_fail_returns_unavailable(self):
-        """Both helius and twitter fail → SocialInfo(available=False)."""
+        """No smart money + no social metadata → SocialInfo(available=False)."""
         from memedog.enricher.providers import fetch_social
         from memedog.clients.base import DataSourceError
 
         mock_helius = AsyncMock()
-        mock_helius.count_smart_money_buys = AsyncMock(
+        mock_helius.analyze_smart_money = AsyncMock(
             side_effect=DataSourceError("helius error")
         )
 
-        mock_twitter = AsyncMock()
-        mock_twitter.count_mentions = AsyncMock(
-            side_effect=DataSourceError("twitter error")
-        )
-
         result = await fetch_social(
-            symbol="DOGE",
             mint="MINT123",
             helius_client=mock_helius,
-            twitter_client=mock_twitter,
-            smart_wallets={"wallet1"},
-            lookback_min=60,
+            smart_wallets={},
+            social_platforms=[],
         )
 
         assert result.available is False
 
-    async def test_empty_smart_wallets_returns_zero_smart_money(self):
-        """When no smart wallets, count is 0 (helius returns 0 for empty set)."""
+    async def test_empty_smart_wallets_dict_with_result_returns_available(self):
+        """Empty wallet library → analyze_smart_money still called; result used."""
         from memedog.enricher.providers import fetch_social
 
         mock_helius = AsyncMock()
-        mock_helius.count_smart_money_buys = AsyncMock(return_value=0)
-
-        mock_twitter = AsyncMock()
-        mock_twitter.count_mentions = AsyncMock(
-            return_value={"mentions_1h": 10, "growth": None}
+        mock_helius.analyze_smart_money = AsyncMock(
+            return_value={"buys": 0, "distinct_wallets": 0, "buyers": [], "top_tier": None}
         )
 
         result = await fetch_social(
-            symbol="DOGE",
             mint="MINT123",
             helius_client=mock_helius,
-            twitter_client=mock_twitter,
-            smart_wallets=set(),
-            lookback_min=60,
+            smart_wallets={},
+            social_platforms=[],
         )
 
         assert result.available is True
         assert result.smart_money_buys == 0
 
-    async def test_smart_money_none_and_twitter_raises_returns_unavailable(self):
-        """smart money returns None (best-effort failure) + twitter raises → available=False."""
+    async def test_smart_money_none_no_socials_returns_unavailable(self):
+        """analyze_smart_money returns None + no socials → available=False."""
         from memedog.enricher.providers import fetch_social
-        from memedog.clients.base import DataSourceError
 
         mock_helius = AsyncMock()
-        mock_helius.count_smart_money_buys = AsyncMock(return_value=None)
-
-        mock_twitter = AsyncMock()
-        mock_twitter.count_mentions = AsyncMock(
-            side_effect=DataSourceError("twitter bearer not configured")
-        )
+        mock_helius.analyze_smart_money = AsyncMock(return_value=None)
 
         result = await fetch_social(
-            symbol="DOGE",
             mint="MINT123",
             helius_client=mock_helius,
-            twitter_client=mock_twitter,
-            smart_wallets={"wallet1"},
-            lookback_min=60,
+            smart_wallets={"wallet1": None},
+            social_platforms=[],
         )
 
         assert result.available is False
 
-    async def test_smart_money_real_value_and_twitter_raises_returns_available(self):
-        """smart money returns a real int + twitter raises → available=True."""
+    async def test_smart_money_with_socials_returns_available(self):
+        """analyze_smart_money returns real value + social platforms → available=True."""
         from memedog.enricher.providers import fetch_social
-        from memedog.clients.base import DataSourceError
+        from memedog.models import WalletInfo
 
         mock_helius = AsyncMock()
-        mock_helius.count_smart_money_buys = AsyncMock(return_value=5)
-
-        mock_twitter = AsyncMock()
-        mock_twitter.count_mentions = AsyncMock(
-            side_effect=DataSourceError("twitter bearer not configured")
+        mock_helius.analyze_smart_money = AsyncMock(
+            return_value={"buys": 5, "distinct_wallets": 3, "buyers": [], "top_tier": "S"}
         )
 
         result = await fetch_social(
-            symbol="DOGE",
             mint="MINT123",
             helius_client=mock_helius,
-            twitter_client=mock_twitter,
-            smart_wallets={"wallet1"},
-            lookback_min=60,
+            smart_wallets={"wallet1": WalletInfo(address="wallet1")},
+            social_platforms=["twitter"],
         )
 
         assert result.available is True
         assert result.smart_money_buys == 5
-        assert result.twitter_mentions_1h is None
+        assert result.has_twitter is True
+
+
+# ---------------------------------------------------------------------------
+# New fetch_social (DI-style, no Twitter) + fetch_narrative — Task 7
+# ---------------------------------------------------------------------------
+
+
+class _FakeHelius:
+    def __init__(self, result):
+        self._result = result
+
+    async def analyze_smart_money(self, mint, library):
+        return self._result
+
+
+@pytest.mark.asyncio
+async def test_fetch_social_consensus_and_metadata():
+    from memedog.enricher.providers import fetch_social
+    helius = _FakeHelius({
+        "buys": 3, "distinct_wallets": 2,
+        "buyers": [WalletInfo(address="A", label="kol", tier="A")],
+        "top_tier": "A",
+    })
+    info = await fetch_social(
+        mint="M", helius_client=helius,
+        smart_wallets={"A": WalletInfo(address="A")},
+        social_platforms=["twitter", "telegram", "website"],
+    )
+    assert info.available is True
+    assert info.smart_money_buys == 3
+    assert info.smart_money_distinct_wallets == 2
+    assert info.smart_money_top_tier == "A"
+    assert info.has_twitter is True and info.has_telegram is True and info.has_website is True
+    assert info.socials_count == 3
+
+
+@pytest.mark.asyncio
+async def test_fetch_social_smart_money_none_still_available_via_metadata():
+    from memedog.enricher.providers import fetch_social
+    helius = _FakeHelius(None)
+    info = await fetch_social(
+        mint="M", helius_client=helius, smart_wallets={"A": WalletInfo(address="A")},
+        social_platforms=["twitter"],
+    )
+    assert info.available is True
+    assert info.has_twitter is True
+    assert info.smart_money_distinct_wallets is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_social_no_smart_no_socials_unavailable():
+    from memedog.enricher.providers import fetch_social
+    helius = _FakeHelius(None)
+    info = await fetch_social(mint="M", helius_client=helius, smart_wallets={}, social_platforms=[])
+    assert info.available is False
+
+
+@pytest.mark.asyncio
+async def test_fetch_narrative_delegates():
+    from memedog.enricher.providers import fetch_narrative
+    info = await fetch_narrative(symbol="QDOG", name="Quantum Dog")
+    assert info.category == "animal"
+
+
+# --- Fix: holders must be AMM-consistent with HardFilter (use RugCheck report) ---
+
+class _FakeHeliusHolders:
+    """Returns AMM-INCLUDED (inflated) concentration like the raw RPC does."""
+    async def get_largest_holders(self, mint):
+        return {"top10_pct": 99.0, "max_wallet_pct": 50.0, "holder_count": 18}
+
+
+@pytest.mark.asyncio
+async def test_fetch_holders_prefers_rugcheck_amm_excluded():
+    """When a RugCheck report is present, holders concentration comes from it
+    (AMM-excluded, consistent with HardFilter) — NOT the inflated Helius value."""
+    from memedog.enricher.providers import fetch_holders
+    report = {"top10_pct": 24.2, "max_wallet_pct": 3.0, "dev_pct": 0.0, "sniper_pct": 1.5}
+    info = await fetch_holders("M", _FakeHeliusHolders(), rugcheck_report=report)
+    assert info.available is True
+    assert info.top10_pct == 24.2          # RugCheck, not Helius 99.0
+    assert info.max_wallet_pct == 3.0       # RugCheck, not Helius 50.0
+    assert info.dev_wallet_pct == 0.0
+    assert info.sniper_pct == 1.5
+    assert info.holder_count == 18          # count still from Helius
+
+
+@pytest.mark.asyncio
+async def test_fetch_holders_falls_back_to_helius_without_report():
+    from memedog.enricher.providers import fetch_holders
+    info = await fetch_holders("M", _FakeHeliusHolders(), rugcheck_report=None)
+    assert info.top10_pct == 99.0           # no report → Helius approximation
+    assert info.holder_count == 18
+
+
+class _SlowCountHelius:
+    async def get_largest_holders(self, mint):
+        await asyncio.sleep(5)              # simulate a hanging RPC
+        return {"holder_count": 20}
+
+
+@pytest.mark.asyncio
+async def test_fetch_holders_concentration_survives_slow_helius_count():
+    """With a RugCheck report, a slow/hanging Helius holder_count call must NOT
+    lose the (already-available, AMM-excluded) concentration data."""
+    from memedog.enricher.providers import fetch_holders
+    report = {"top10_pct": 24.2, "max_wallet_pct": 3.0, "dev_pct": 0.0, "sniper_pct": 1.5}
+    info = await fetch_holders(
+        "M", _SlowCountHelius(), rugcheck_report=report, holder_count_timeout=0.1
+    )
+    assert info.available is True
+    assert info.top10_pct == 24.2          # concentration preserved
+    assert info.max_wallet_pct == 3.0
+    assert info.holder_count is None        # count timed out → None, not fatal
+
+
+# --- Fix: free social metadata must survive a slow/hanging smart-money call ---
+
+class _SlowHelius:
+    async def analyze_smart_money(self, mint, library):
+        await asyncio.sleep(5)  # simulate a slow Helius transactions call
+        return {"buys": 1, "distinct_wallets": 1, "buyers": [], "top_tier": None}
+
+
+@pytest.mark.asyncio
+async def test_fetch_social_metadata_survives_slow_smart_money():
+    from memedog.enricher.providers import fetch_social
+    info = await fetch_social(
+        mint="M", helius_client=_SlowHelius(),
+        smart_wallets={"A": WalletInfo(address="A")},
+        social_platforms=["twitter", "telegram"],
+        smart_money_timeout=0.1,  # smart money exceeds this → degrades
+    )
+    assert info.available is True           # metadata preserved
+    assert info.has_twitter is True and info.has_telegram is True
+    assert info.socials_count == 2
+    assert info.smart_money_distinct_wallets is None  # smart money timed out

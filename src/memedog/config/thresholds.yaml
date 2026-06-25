@@ -7,30 +7,34 @@ scanner:
   prefilter_min_volume_5m: 500
   dedup_ttl_min: 720
 hardfilter:
-  authority:
-    require_mint_revoked: true
-    require_freeze_revoked: true
-    require_lp_burned_or_locked: true
-  holders:
-    max_top10_pct: 35
-    max_single_wallet_pct: 20
-    max_dev_pct: 10
-    max_sniper_pct: 30
-  momentum:
-    min_liquidity_usd: 20000
-    min_volume_5m: 1000
-    min_buy_sell_ratio_5m: 1.0
-    max_fdv_to_liquidity: 50
-  on_rugcheck_failure: drop
+  # ===== 调参面板：改阈值只动这里，无需改代码 =====
+  momentum:                          # 资金/动量门槛（用 Scanner 已有数据，不联网）
+    min_liquidity_usd: 13000         # 流动性下限USD | 建议12k~20k | 关:momentum
+    min_volume_5m: 300               # 5min成交量下限USD | 建议300~1000 | 关:momentum
+    max_fdv_to_liquidity: 8          # FDV/流动性上限 | 建议5~10 | 关:momentum
+    min_buy_sell_ratio_floor: 0.2    # 买卖比极端兑底（仅<此值才丢，其余交打分） | 建议0.1~0.3 | 关:momentum
+  holders:                           # 持币集中度（占比均已剔除AMM/LP池）
+    max_top10_pct: 35                # Top10占比上限% | 建议30~40 | 关:holders
+    max_single_wallet_pct: 20        # 单一钱包上限% | 建议15~25 | 关:holders
+    max_dev_pct: 10                  # 开发者持仓上限% | 建议5~10 | 关:holders
+    max_sniper_pct: 30               # sniper占比上限% | 建议20~30 | 关:holders
+  authority:                         # 合约权限红线（任一不过即丢）
+    require_mint_revoked: true       # 要求mint权限已放弃 | 关:authority
+    require_freeze_revoked: true     # 要求freeze权限已放弃 | 关:authority
+    require_lp_burned_or_locked: true # 要求LP已烧毁/锁定 | 关:authority
+  on_rugcheck_failure: drop          # RugCheck不可用：drop=保守丢弃 / pass_flagged=放行打标
 enricher:
   per_provider_timeout_sec: 8
   smart_money_wallets_file: config/smart_wallets.txt
   twitter_lookback_min: 60
 scoring:
-  weights: { safety: 0.35, holders: 0.25, momentum: 0.25, social: 0.15 }
+  weights: { safety: 0.30, holders: 0.25, momentum: 0.30, social: 0.10, narrative: 0.05 }
   holders: { top10_full_score_at: 15, top10_zero_score_at: 50, max_wallet_zero_at: 25, holder_count_full_at: 500, sniper_zero_at: 30 }
   momentum: { liquidity_full_at: 100000, volume_5m_full_at: 20000 }
   social: { smart_money_full_at: 10, twitter_growth_full_at: 2.0, twitter_growth_zero_at: -1.0 }
+  narrative:
+    category_scores: { animal: 70, ai: 65, political: 60, culture: 55, finance_utility: 35, unknown: 40 }
+    meme_collision_bonus: 10
   missing_dimension_weight_factor: 0.5
   neutral_score: 50
 llmjudge:

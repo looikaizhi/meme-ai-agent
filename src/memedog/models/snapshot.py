@@ -37,11 +37,34 @@ class MomentumInfo(BaseModel):
     fdv_to_liquidity: Optional[float] = None
 
 
+class WalletInfo(BaseModel):
+    address: str
+    label: Optional[str] = None
+    tier: Optional[str] = None
+
+
+class NarrativeInfo(BaseModel):
+    available: bool = True
+    category: Optional[str] = None
+    matched_keywords: list[str] = []
+    meme_collision: list[str] = []
+    summary: str = ""
+
+
 class SocialInfo(BaseModel):
     available: bool = True
     smart_money_buys: Optional[int] = None
-    twitter_mentions_1h: Optional[int] = None
-    twitter_growth: Optional[float] = None
+    twitter_mentions_1h: Optional[int] = None   # deprecated: production no longer fills
+    twitter_growth: Optional[float] = None        # deprecated: production no longer fills
+    # smart-money consensus
+    smart_money_distinct_wallets: Optional[int] = None
+    smart_money_buyers: Optional[list[WalletInfo]] = None
+    smart_money_top_tier: Optional[str] = None
+    # social metadata
+    has_twitter: Optional[bool] = None
+    has_telegram: Optional[bool] = None
+    has_website: Optional[bool] = None
+    socials_count: Optional[int] = None
 
 
 class TokenSnapshot(BaseModel):
@@ -50,4 +73,5 @@ class TokenSnapshot(BaseModel):
     holders: HolderInfo
     momentum: MomentumInfo
     social: SocialInfo
+    narrative: NarrativeInfo = NarrativeInfo()
     enriched_at: AwareDatetime

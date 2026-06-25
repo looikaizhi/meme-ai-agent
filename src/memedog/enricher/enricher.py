@@ -1,8 +1,9 @@
-"""Enricher: parallel orchestration of the 4 dimension providers.
+"""Enricher: orchestration of the dimension providers into a TokenSnapshot.
 
-Each provider runs concurrently under asyncio.gather with an individual timeout.
-If a provider times out or raises, its dimension is substituted with
-*Info(available=False). enrich() NEVER raises to the caller.
+The four network dimensions (safety/holders/momentum/social) run concurrently
+under asyncio.gather with an individual timeout; if one times out or raises, its
+dimension is substituted with *Info(available=False). The deterministic narrative
+dimension is derived separately (no I/O). enrich() NEVER raises to the caller.
 """
 from __future__ import annotations
 
@@ -20,35 +21,50 @@ from memedog.models import (
     HolderInfo,
     MomentumInfo,
     SocialInfo,
+    NarrativeInfo,
+    WalletInfo,
 )
 from memedog.enricher.providers import (
     fetch_safety,
     fetch_holders,
     fetch_momentum,
     fetch_social,
+    fetch_narrative,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _load_smart_wallets(filepath: str) -> set[str]:
-    """Load smart wallet addresses from a plain-text file (one address per line).
+def _load_smart_wallets(filepath: str) -> dict[str, WalletInfo]:
+    """Load smart wallets as address -> WalletInfo.
 
-    Returns an empty set if the file does not exist or cannot be read.
-    This is intentionally tolerant — a missing file is not an error.
+    Line format: ``address[,label[,tier]]``. Lines starting with ``#`` and
+    blank lines are skipped. Missing/unreadable file -> empty dict (tolerant).
     """
     path = Path(filepath)
     if not path.exists():
-        logger.debug("smart_wallets file not found: %s — using empty set", filepath)
-        return set()
+        logger.debug("smart_wallets file not found: %s — using empty dict", filepath)
+        return {}
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-        wallets = {line.strip() for line in lines if line.strip()}
-        logger.debug("Loaded %d smart wallets from %s", len(wallets), filepath)
-        return wallets
     except OSError as exc:
         logger.warning("Could not read smart_wallets file %s: %s", filepath, exc)
-        return set()
+        return {}
+
+    library: dict[str, WalletInfo] = {}
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p.strip() for p in line.split(",")]
+        address = parts[0]
+        if not address:
+            continue
+        label = parts[1] if len(parts) > 1 and parts[1] else None
+        tier = parts[2] if len(parts) > 2 and parts[2] else None
+        library[address] = WalletInfo(address=address, label=label, tier=tier)
+    logger.debug("Loaded %d smart wallets from %s", len(library), filepath)
+    return library
 
 
 class Enricher:
@@ -61,23 +77,27 @@ class Enricher:
     helius_client:
         HeliusClient instance used for holders and smart-money sub-sources.
     twitter_client:
-        TwitterClient instance used for the social twitter sub-source.
+        Deprecated/unused — Twitter was removed from the production social path
+        (Phase 1). Kept as an optional param only for backward-compatible wiring.
     cfg:
-        EnricherConfig with per_provider_timeout_sec, smart_money_wallets_file,
-        and twitter_lookback_min.
+        EnricherConfig with per_provider_timeout_sec and smart_money_wallets_file.
     """
 
     def __init__(
         self,
         rugcheck_client,
         helius_client,
-        twitter_client,
-        cfg: EnricherConfig,
+        twitter_client=None,
+        cfg: Optional[EnricherConfig] = None,
     ) -> None:
         self._rugcheck_client = rugcheck_client
         self._helius_client = helius_client
-        self._twitter_client = twitter_client
-        self._cfg = cfg
+        self._twitter_client = twitter_client  # kept for backward-compat; not used
+        self._cfg = cfg or EnricherConfig(
+            per_provider_timeout_sec=10.0,
+            smart_money_wallets_file="config/smart_wallets.txt",
+            twitter_lookback_min=60,
+        )
 
     async def enrich(
         self,
@@ -105,6 +125,9 @@ class Enricher:
         timeout = self._cfg.per_provider_timeout_sec
         smart_wallets = _load_smart_wallets(self._cfg.smart_money_wallets_file)
 
+        # Gather social_platforms from candidate (populated by Scanner)
+        social_platforms = list(getattr(candidate, "social_platforms", []) or [])
+
         # Build coroutines for each dimension provider
         safety_coro = fetch_safety(
             mint=candidate.mint,
@@ -114,15 +137,19 @@ class Enricher:
         holders_coro = fetch_holders(
             mint=candidate.mint,
             helius_client=self._helius_client,
+            rugcheck_report=rugcheck_report,  # AMM-excluded concentration (matches HardFilter)
+            # bound the best-effort holder_count fetch so a hang can't drop the dimension
+            holder_count_timeout=max(1.0, timeout - 1.0),
         )
         momentum_coro = fetch_momentum(candidate)
         social_coro = fetch_social(
-            symbol=candidate.symbol,
             mint=candidate.mint,
             helius_client=self._helius_client,
-            twitter_client=self._twitter_client,
             smart_wallets=smart_wallets,
-            lookback_min=self._cfg.twitter_lookback_min,
+            social_platforms=social_platforms,
+            # bound the slow Helius smart-money call below the per-provider deadline
+            # so a timeout never drops the zero-cost social metadata
+            smart_money_timeout=max(1.0, timeout - 1.0),
         )
 
         # Run all providers concurrently; collect results/exceptions
@@ -153,11 +180,21 @@ class Enricher:
             logger.warning("social provider failed: %s", social)
             social = SocialInfo(available=False)
 
+        # Narrative classification — deterministic, never raises, fast
+        try:
+            narrative_info = await fetch_narrative(
+                symbol=candidate.symbol,
+                name=getattr(candidate, "name", "") or candidate.symbol,
+            )
+        except Exception:  # noqa: BLE001
+            narrative_info = NarrativeInfo(available=False)
+
         return TokenSnapshot(
             candidate=candidate,
             safety=safety,
             holders=holders,
             momentum=momentum,
             social=social,
+            narrative=narrative_info,
             enriched_at=datetime.now(timezone.utc),
         )

@@ -80,7 +80,9 @@ def _summarize_workflow(steps: list[StepFinding]) -> str:
 
 
 def _completeness(snapshot: TokenSnapshot) -> float:
-    """Fraction of the 4 dimensions whose data is available."""
+    """Fraction of the 4 network dimensions (safety/holders/momentum/social) whose
+    data is available. Narrative is excluded — it is deterministic, always available,
+    and is not a network-data-completeness signal."""
     flags = [
         snapshot.safety.available,
         snapshot.holders.available,

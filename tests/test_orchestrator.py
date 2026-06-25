@@ -28,6 +28,7 @@ from memedog.config.settings import (
     ScoringHoldersConfig,
     ScoringMomentumConfig,
     ScoringSocialConfig,
+    ScoringNarrativeConfig,
     Settings,
     Config,
 )
@@ -138,7 +139,7 @@ def _make_cfg() -> Config:
             momentum=MomentumFilterConfig(
                 min_liquidity_usd=20_000.0,
                 min_volume_5m=1_000.0,
-                min_buy_sell_ratio_5m=1.0,
+                min_buy_sell_ratio_floor=0.2,
                 max_fdv_to_liquidity=50.0,
             ),
             on_rugcheck_failure="drop",
@@ -149,7 +150,7 @@ def _make_cfg() -> Config:
             twitter_lookback_min=60,
         ),
         scoring=ScoringConfig(
-            weights={"safety": 0.35, "holders": 0.25, "momentum": 0.25, "social": 0.15},
+            weights={"safety": 0.30, "holders": 0.25, "momentum": 0.30, "social": 0.10, "narrative": 0.05},
             holders=ScoringHoldersConfig(
                 top10_full_score_at=15.0,
                 top10_zero_score_at=50.0,
@@ -165,6 +166,10 @@ def _make_cfg() -> Config:
                 smart_money_full_at=10.0,
                 twitter_growth_full_at=2.0,
                 twitter_growth_zero_at=-1.0,
+            ),
+            narrative=ScoringNarrativeConfig(
+                category_scores={"animal": 70, "ai": 65, "political": 60, "culture": 55, "finance_utility": 35, "unknown": 40},
+                meme_collision_bonus=10,
             ),
             missing_dimension_weight_factor=0.5,
             neutral_score=50.0,

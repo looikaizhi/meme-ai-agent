@@ -1,0 +1,19 @@
+gmgn:
+  rate_limit_rps: 1.0          # conservative; gmgn token routes allow ~20/s but 1/s is safe
+  cache_ttl_sec: 60
+  max_evidence_calls: 5
+  intake_drain_rps: 0.5        # placeholder — Telegram intake drain pacing (not wired yet)
+  on_failure: pass_flagged     # drop | pass_flagged
+  on_429: suspend_until_reset  # placeholder — GmgnCli raises RateLimitBanned; orchestrator skips
+  max_retries: 2               # bounded retry for transient (non-429) gmgn errors (audit H-1)
+hardfilter:
+  max_top10_rate: 0.35         # 0-1 fraction (35%)
+  max_creator_rate: 0.10
+  max_dev_rate: 0.10
+  max_sniper_wallets: 20       # count
+  max_fresh_wallet_rate: 0.6
+  max_bundler_rate: 0.3
+  min_liquidity_usd: 20000
+  min_volume_5m: 1000
+  min_buy_sell_ratio_5m: 1.0
+  max_fdv_to_liquidity: 50

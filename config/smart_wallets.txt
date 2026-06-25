@@ -1,0 +1,4 @@
+# address,label,tier   (label/tier 可选;tier: S/A/B 高->低)
+# 示例条目 — 离线维护;Phase 2 才做自动质量计算
+9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin,early-runner-buyer,S
+3NkzLTtTfEWqDY2Mm3uVt2wog8yDN48yDu3vsTS4MSaq,kol-wallet,A

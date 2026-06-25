@@ -73,7 +73,7 @@ def make_hard_filter_cfg(on_rugcheck_failure: str = "drop") -> HardFilterConfig:
         momentum=MomentumFilterConfig(
             min_liquidity_usd=20_000.0,
             min_volume_5m=1_000.0,
-            min_buy_sell_ratio_5m=1.0,
+            min_buy_sell_ratio_floor=0.2,
             max_fdv_to_liquidity=50.0,
         ),
         on_rugcheck_failure=on_rugcheck_failure,
@@ -411,9 +411,14 @@ class TestHardFilterRealFixtures:
     CONCENTRATED (report_concentrated.json) parsed values:
       mint_authority_revoked=True, freeze_authority_revoked=True,
       lp_burned_or_locked=True,
-      top10_pct≈131.2% (first holder alone holds 71.9%).
+      top10_pct≈113.5% (first holder alone holds 71.9%).
 
-    Any max_top10_pct < 131 will DROP the concentrated token.
+    Any max_top10_pct < 113 will DROP the concentrated token.
+
+    Note: report_concentrated.json's top holder owner was changed to a
+    synthetic non-AMM wallet so its 71.9% stake counts as real wallet
+    concentration (the original owner was the AMM pool, which is now
+    correctly excluded).
     """
 
     def _make_bonk_cfg(self) -> HardFilterConfig:
@@ -433,14 +438,14 @@ class TestHardFilterRealFixtures:
             momentum=MomentumFilterConfig(
                 min_liquidity_usd=20_000.0,
                 min_volume_5m=1_000.0,
-                min_buy_sell_ratio_5m=1.0,
+                min_buy_sell_ratio_floor=0.2,
                 max_fdv_to_liquidity=50.0,
             ),
             on_rugcheck_failure="drop",
         )
 
     def _make_conc_cfg(self) -> HardFilterConfig:
-        """Standard config; concentrated token's top10 (131%) will fail."""
+        """Standard config; concentrated token's top10 (113.5%) will fail."""
         return HardFilterConfig(
             authority=AuthorityFilterConfig(
                 require_mint_revoked=True,
@@ -448,7 +453,7 @@ class TestHardFilterRealFixtures:
                 require_lp_burned_or_locked=False,  # concentrated token has LP locked; irrelevant
             ),
             holders=HoldersFilterConfig(
-                max_top10_pct=35.0,         # 131% >> 35 → FAIL
+                max_top10_pct=35.0,         # 113.5% >> 35 → FAIL
                 max_single_wallet_pct=20.0,
                 max_dev_pct=10.0,
                 max_sniper_pct=30.0,
@@ -456,7 +461,7 @@ class TestHardFilterRealFixtures:
             momentum=MomentumFilterConfig(
                 min_liquidity_usd=20_000.0,
                 min_volume_5m=1_000.0,
-                min_buy_sell_ratio_5m=1.0,
+                min_buy_sell_ratio_floor=0.2,
                 max_fdv_to_liquidity=50.0,
             ),
             on_rugcheck_failure="drop",
@@ -506,7 +511,7 @@ class TestHardFilterRealFixtures:
         assert len(survivors) == 0
         assert len(hf.dropped) == 1
         _, reason = hf.dropped[0]
-        # top10_pct ≈ 131.2 >> 35 → holders check fails
+        # top10_pct ≈ 113.5 >> 35 → holders check fails
         assert "top10" in reason.lower() or "holders" in reason.lower()
 
     async def test_momentum_first_no_rugcheck_when_momentum_fails(self):
@@ -563,7 +568,7 @@ class TestHardFilterRealFixtures:
                 require_lp_burned_or_locked=False,
             ),
             holders=HoldersFilterConfig(
-                max_top10_pct=50.0,         # BONK 45.8% passes; concentrated 131% fails
+                max_top10_pct=50.0,         # BONK 45.8% passes; concentrated 113.5% fails
                 max_single_wallet_pct=80.0,  # high enough to not block on single wallet
                 max_dev_pct=10.0,
                 max_sniper_pct=30.0,
@@ -571,7 +576,7 @@ class TestHardFilterRealFixtures:
             momentum=MomentumFilterConfig(
                 min_liquidity_usd=20_000.0,
                 min_volume_5m=1_000.0,
-                min_buy_sell_ratio_5m=1.0,
+                min_buy_sell_ratio_floor=0.2,
                 max_fdv_to_liquidity=50.0,
             ),
             on_rugcheck_failure="drop",

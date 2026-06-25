@@ -213,6 +213,14 @@ class Scanner:
     def _convert(self, pair: dict) -> TokenCandidate:
         """Convert a raw DexScreener pair dict to a :class:`TokenCandidate`."""
         created_at = self._parse_created_at(pair)
+        info = pair.get("info") or {}
+        platforms: list[str] = []
+        for s in info.get("socials") or []:
+            t = (s.get("type") or s.get("platform") or "").strip().lower()
+            if t and t not in platforms:
+                platforms.append(t)
+        if (info.get("websites") or []) and "website" not in platforms:
+            platforms.append("website")
         return TokenCandidate(
             mint=pair["baseToken"]["address"],
             pair_address=pair["pairAddress"],
@@ -227,6 +235,7 @@ class Scanner:
             txns_5m_buys=int(pair["txns"]["m5"]["buys"]),
             txns_5m_sells=int(pair["txns"]["m5"]["sells"]),
             price_change_5m=float(pair["priceChange"]["m5"]),
+            social_platforms=platforms,
             trace_id=uuid4().hex,
         )
 

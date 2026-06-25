@@ -18,3 +18,4 @@ class TokenCandidate(BaseModel):
     txns_5m_sells: int
     price_change_5m: float
     trace_id: str
+    social_platforms: list[str] = []

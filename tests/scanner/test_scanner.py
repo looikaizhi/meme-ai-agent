@@ -891,3 +891,66 @@ class TestRealFixtureData:
 
         # The non-solana pair must be filtered out
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Social platforms extraction (Task 5)
+# ---------------------------------------------------------------------------
+
+
+class TestSocialPlatforms:
+    async def test_convert_captures_social_platforms(self):
+        """_convert extracts social types and 'website' from pair['info']."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        pair = make_raw_pair(
+            address="MINT_SOC",
+            symbol="SOC",
+            pair_address="PAIR_SOC",
+            liquidity_usd=25_000.0,
+            volume_m5=500.0,
+            age_min=15.0,
+        )
+        pair["info"] = {
+            "socials": [
+                {"type": "twitter", "url": "x"},
+                {"type": "telegram", "url": "y"},
+            ],
+            "websites": [{"url": "https://z"}],
+        }
+        client = make_fake_client(
+            addresses=["MINT_SOC"],
+            pairs_by_mint={"MINT_SOC": [pair]},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert set(results[0].social_platforms) == {"twitter", "telegram", "website"}
+
+    async def test_convert_no_info_empty_platforms(self):
+        """_convert yields social_platforms=[] when pair has no 'info' key."""
+        from memedog.scanner.scanner import Scanner
+
+        cfg = make_scanner_config()
+        pair = make_raw_pair(
+            address="MINT_NOSOC",
+            symbol="NOSOC",
+            pair_address="PAIR_NOSOC",
+            liquidity_usd=25_000.0,
+            volume_m5=500.0,
+            age_min=15.0,
+        )
+        pair.pop("info", None)
+        client = make_fake_client(
+            addresses=["MINT_NOSOC"],
+            pairs_by_mint={"MINT_NOSOC": [pair]},
+        )
+
+        scanner = Scanner(client=client, cfg=cfg)
+        results = await scanner.scan()
+
+        assert len(results) == 1
+        assert results[0].social_platforms == []
