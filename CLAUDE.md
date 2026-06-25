@@ -107,4 +107,7 @@
 
 ## 当前状态
 
-设计阶段。`plan/` 目录为各模块实现蓝图;`src/` 尚未实现。先读对应的 `plan/*.md` 再动手实现某模块。
+- **`src/memedog/`**:原始流水线(Scanner→HardFilter→Enricher→ScoreEngine→LLMJudge→PaperTrader),已实现。
+- **`src/memedogV2/`**:GMGN 驱动的新流水线,**生产路径已落地**。入口 = `(CA, LP)` 地址 → 确定性 HardFilter(`gmgn-cli token security/info`,接管 RugCheck+Helius)→ 执行外壳 `harness/`(确定性取数+证据 → DeepSeek/Codex 跑 Bull/Bear/Judge → Signal + `runs/` 运行记录)。设计见 `docs/superpowers/specs/2026-06-25-*.md`,实现计划见 `docs/superpowers/plans/2026-06-25-*.md`。
+  - GMGN key 走 `~/.config/gmgn/.env`(不是项目 `.env`);`npm i -g gmgn-cli`;真实环境测试在 `tests/memedogV2/live/`(`pytest -m live`)。
+  - 仍延后:harness 合规评测(`compliance.py`)、跨模型回放(`replay.py`)。

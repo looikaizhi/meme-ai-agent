@@ -253,3 +253,16 @@ GMGN 命令返回限流时，执行外壳不得循环重试。它应记录限流
 推荐采用确定性执行外壳作为生产主路径，并把 Codex 技能调用能力放到代理合规评测路径中。这样可以同时解决两个问题：生产信号不再依赖大模型是否自觉调用技能，同时仍然能够测试 Codex 和其他大模型后端在相同任务下的行为差异。
 
 GMGN 技能需要被版本锁定，并在必要时保存到目录中，但不应该成为生产主路径的唯一可信执行机制。真正可信的部分应是执行外壳状态机、工具适配层、结构化证据、运行记录和可回放测试。
+
+## 十九、落地状态(2026-06-25,Phase 1 + 运行记录 已实现)
+
+生产主路径已落地于 `src/memedogV2/harness/`,并经真实环境验证:
+
+- **确定性取数**:`tool_registry.py`(`GmgnCliToolSource` 复用带限速/缓存/429 的 `GmgnCli`,`FixtureToolSource` 供离线测试),每次抓取产 `ToolCallRecord`。GMGN 数据由外壳发起,大模型不参与抓取。
+- **确定性证据**:`evidence_builder.build_evidence(facts, ca)` 从已抓取的 `token info` facts 经 `FIELD_MAP` 抽取(smart money/KOL/dev 战绩);`dev_graduation_rate` 无 gmgn 来源,恒 None 并进 `missing`。**审计阶段零额外 gmgn 调用、零 LLM 抓数**。
+- **可换后端**:`model_registry.py` 统一接口 `complete(*, role, prompt, schema) -> (dict, ModelCallRecord)`。`DeepSeekBackend`(OpenAI 兼容 API,`json_object` + 一次修复重试)、`CodexBackend`(strict `--output-schema`)、`FakeBackend`(单测)。`__main__` 默认 `deepseek`,可传 `codex`。
+- **固定工作流**:`runner.py` 顺序 read_security→read_info→hardfilter→build_evidence→bull→bear→judge→signal;硬过滤淘汰则模型步骤标记 SKIPPED;`run()` 永不抛(后端报错/裁决畸形 → FAILED 步 + 无信号)。
+- **运行记录**:`recorder.py` 写 `runs/memedogV2/*.json`(每步 + 工具/模型调用证据;`runs/` 已 gitignore)。
+- **真实环境测试**:`tests/memedogV2/live/`(`-m live`,默认不跑),覆盖真实 gmgn-cli、真实 DeepSeek、真实 Codex、真实全链路。已实测通过。
+
+**仍延后(本次未做)**:`compliance.py`(§七 代理合规评测)、完整 `replay.py` 跨模型回放、`tools/gmgn-skills.lock.json`(§十一,生产已不依赖技能,留待合规评测阶段)。
