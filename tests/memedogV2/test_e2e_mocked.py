@@ -2,7 +2,6 @@ import json
 import pytest
 from memedogV2.clients.gmgn_cli import GmgnCli
 from memedogV2.hardfilter.hardfilter import HardFilter
-from memedogV2.audit.evidence import EvidenceGatherer
 from memedogV2.audit.debate import BullBearJudge
 from memedogV2.orchestrator import V2Orchestrator, AuditPipeline
 
@@ -54,12 +53,21 @@ def _cfg():
             "max_fdv_to_liquidity": 50}
 
 
+class _StubEvidenceGatherer:
+    """Duck-typed stub for the old EvidenceGatherer interface used by AuditPipeline."""
+    async def gather(self, ca: str):
+        from memedogV2.models.contracts import EvidenceBundle
+        return EvidenceBundle(ca_address=ca, smart_money_count=4, kol_holder_count=1,
+                              dev_created_token_count=0, dev_graduation_rate=None,
+                              historical_ath=None, missing=["dev_graduation_rate", "historical_ath"])
+
+
 @pytest.mark.asyncio
 async def test_clean_token_flows_to_recommended_signal():
     cli = GmgnCli(runner=make_runner(), rate_per_sec=1000, capacity=10, cache_ttl_sec=60)
     hf = HardFilter(cli=cli, cfg=_cfg())
     audit = AuditPipeline(
-        gatherer=EvidenceGatherer(agent=StubAgent(), max_calls=5),
+        gatherer=_StubEvidenceGatherer(),
         judge=BullBearJudge(agent=StubAgent()),
     )
     orch = V2Orchestrator(hardfilter=hf, audit=audit)

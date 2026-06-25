@@ -10,10 +10,10 @@ import os
 import sys
 
 from memedogV2.audit.debate import BullBearJudge
-from memedogV2.audit.evidence import EvidenceGatherer
 from memedogV2.clients.gmgn_cli import GmgnCli
 from memedogV2.config import load_v2_config
 from memedogV2.hardfilter.hardfilter import HardFilter
+from memedogV2.harness.evidence_builder import build_evidence
 from memedogV2.llm.codex_agent import CodexAgent
 from memedogV2.orchestrator import AuditPipeline, V2Orchestrator
 
@@ -26,8 +26,16 @@ async def _main(ca: str, lp: str) -> None:
                   cache_ttl_sec=cfg.gmgn["cache_ttl_sec"])
     hf = HardFilter(cli=cli, cfg=cfg.hardfilter, on_failure=cfg.gmgn["on_failure"])
     agent = CodexAgent(cwd=os.getcwd())
+
+    class _FactsPassthruGatherer:
+        """Shim: wraps build_evidence for the duck-typed AuditPipeline.gather(ca) interface.
+        Facts are not available here (orchestrator refactor is a later task); returns empty bundle.
+        TODO: remove when AuditPipeline is refactored to pass hf_result.facts."""
+        async def gather(self, ca: str):
+            return build_evidence(facts={}, ca=ca)
+
     audit = AuditPipeline(
-        gatherer=EvidenceGatherer(agent=agent, max_calls=cfg.gmgn["max_evidence_calls"]),
+        gatherer=_FactsPassthruGatherer(),
         judge=BullBearJudge(agent=agent),
     )
     orch = V2Orchestrator(hardfilter=hf, audit=audit)
