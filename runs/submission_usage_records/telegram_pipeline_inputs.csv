@@ -1,0 +1,661 @@
+id,ts,source,ca_address,lp_address,trace_id,enqueued,raw_text_excerpt
+115,2026-06-25T15:44:29.787217+00:00,cohort:passable-trending,FeMbDoX7R1Psc4GEcvJdsbNbZA3bfztcyDCatJVJpump,"",716dba5fa309,1,"{""id"": 181566007, ""chain"": ""sol"", ""address"": ""FeMbDoX7R1Psc4GEcvJdsbNbZA3bfztcyDCatJVJpump"", ""name"": ""three.ws"", ""symbol"": ""three"", ""logo"": ""https://gmgn.ai/external-res/b3e19cb43f4b35568be72a1330cb0017_v2.webp"", ""price"": 0.00355965, ""price_change_percent"": -2.37617, ""price_change_percent1m"": 0.604571, ""price_change_percent5m"": -2.37611, ""price_change_percent1h"": -5.68131, ""volume"": 15805.5, ""liquidity"": 405338, ""market_cap"": 3559290, ""total_supply"": 999899660, ""initial_liquidity"": 1206.02, ""his"
+114,2026-06-25T15:44:29.786910+00:00,cohort:passable-trending,6ZSfRJX6aJjnHBEbEnPUhbAoMe3UqGkDfyY8KhShBBJw,"",e85e9795a28a,1,"{""id"": 184182664, ""chain"": ""sol"", ""address"": ""6ZSfRJX6aJjnHBEbEnPUhbAoMe3UqGkDfyY8KhShBBJw"", ""name"": ""Citizen Vigilante"", ""symbol"": ""VIGILANTE"", ""logo"": ""https://gmgn.ai/external-res/01ae09c3df4c2940befd5ccba34cef7b_v2.webp"", ""price"": 8.39817e-05, ""price_change_percent"": -12.5897, ""price_change_percent1m"": 3.71087, ""price_change_percent5m"": -12.5896, ""price_change_percent1h"": 401.303, ""volume"": 18475.9, ""liquidity"": 20659.9, ""market_cap"": 83978.4, ""total_supply"": 999961272, ""initial_liquidity"": "
+113,2026-06-25T15:44:29.786541+00:00,cohort:passable-trending,GDJDynz2wGkDX5JToeYgFwY8jg7o2okuoD7EhBXpump,"",4e6d70dc21f5,1,"{""id"": 184330016, ""chain"": ""sol"", ""address"": ""GDJDynz2wGkDX5JToeYgFwY8jg7o2okuoD7EhBXpump"", ""name"": ""Trashcan Capital"", ""symbol"": ""TRASHCAN"", ""logo"": ""https://gmgn.ai/external-res/b68fc36e24e0c611642dc2516f809a86_v2.webp"", ""price"": 0.000446962, ""price_change_percent"": -24.0714, ""price_change_percent1m"": 0.102285, ""price_change_percent5m"": -24.0713, ""price_change_percent1h"": -34.0226, ""volume"": 32448.8, ""liquidity"": 48419.5, ""market_cap"": 446962, ""total_supply"": 999999927, ""initial_liquidity"": 11"
+112,2026-06-25T15:44:29.785178+00:00,cohort:passable-trending,FMqh9mqR6drPZqqW6wPqLHxX4rqNDWGhYLaMfoaJpump,"",af5f150daff2,1,"{""id"": 184031602, ""chain"": ""sol"", ""address"": ""FMqh9mqR6drPZqqW6wPqLHxX4rqNDWGhYLaMfoaJpump"", ""name"": ""world.xyz"", ""symbol"": ""world"", ""logo"": ""https://gmgn.ai/external-res/6ca9af3eb18f8d12c96c4d3de00b1044_v2.webp"", ""price"": 0.00208183, ""price_change_percent"": -5.87293, ""price_change_percent1m"": -2.08264, ""price_change_percent5m"": -5.8729, ""price_change_percent1h"": -24.6829, ""volume"": 46317.3, ""liquidity"": 236525, ""market_cap"": 2081770, ""total_supply"": 999972271, ""initial_liquidity"": 162.905, ""his"
+111,2026-06-25T15:42:27.611785+00:00,gmgn_trending,FMqh9mqR6drPZqqW6wPqLHxX4rqNDWGhYLaMfoaJpump,"",e099f28dc68c,1,"{""id"": 184031602, ""chain"": ""sol"", ""address"": ""FMqh9mqR6drPZqqW6wPqLHxX4rqNDWGhYLaMfoaJpump"", ""name"": ""world.xyz"", ""symbol"": ""world"", ""logo"": ""https://gmgn.ai/external-res/6ca9af3eb18f8d12c96c4d3de00b1044_v2.webp"", ""price"": 0.0020945, ""price_change_percent"": -10.9925, ""price_change_percent1m"": 0.807005, ""price_change_percent5m"": -10.9926, ""price_change_percent1h"": -21.7096, ""volume"": 51534.4, ""liquidity"": 229690, ""market_cap"": 2094440, ""total_supply"": 999972271, ""initial_liquidity"": 162.905, ""his"
+110,2026-06-25T15:42:27.611489+00:00,gmgn_trending,E5iXGWkdD3rEt8LQDLL5nzxvMkCorg4TPSShcmAUkkTe,"",6155f0ea1eaf,1,"{""id"": 184349768, ""chain"": ""sol"", ""address"": ""E5iXGWkdD3rEt8LQDLL5nzxvMkCorg4TPSShcmAUkkTe"", ""name"": ""GTA Dollars"", ""symbol"": ""GTA$"", ""logo"": """", ""price"": 5.7117e-05, ""price_change_percent"": 52.4702, ""price_change_percent1m"": -1.89816, ""price_change_percent5m"": 52.4702, ""price_change_percent1h"": 261.807, ""volume"": 52849.4, ""liquidity"": 38829.2, ""market_cap"": 57117, ""total_supply"": 1000000000, ""initial_liquidity"": 11597.7, ""history_highest_market_cap"": 62037, ""swaps"": 370, ""buys"": 204, ""sells"": 1"
+109,2026-06-25T15:42:27.611125+00:00,gmgn_trending,498v1axLwpQncyBEEUdSFfmUDe9Hy5bBgCX7G72pndHG,"",2e77f04b2f41,1,"{""id"": 184355630, ""chain"": ""sol"", ""address"": ""498v1axLwpQncyBEEUdSFfmUDe9Hy5bBgCX7G72pndHG"", ""name"": ""bitcuin"", ""symbol"": ""bitcuin"", ""logo"": ""https://gmgn.ai/external-res/eac889a5a771be56440804786e77d575_v2.webp"", ""price"": 1.37902e-05, ""price_change_percent"": 232617000, ""price_change_percent1m"": 31.9238, ""price_change_percent5m"": 232616000, ""price_change_percent1h"": 232616000, ""volume"": 59893.2, ""liquidity"": 17416.3, ""market_cap"": 13790.2, ""total_supply"": 1000000000, ""initial_liquidity"": 11201.7"
+108,2026-06-25T15:42:27.610807+00:00,gmgn_trending,ESFm7b8Hb5jT7PDQwp31xSBD65rCAM9vBA1Fv9wr9Dn3,"",e1e210266bac,1,"{""id"": 184281098, ""chain"": ""sol"", ""address"": ""ESFm7b8Hb5jT7PDQwp31xSBD65rCAM9vBA1Fv9wr9Dn3"", ""name"": ""Jotchua"", ""symbol"": ""Jotchua"", ""logo"": ""https://gmgn.ai/external-res/263ef9836967e58c732c6b26b955b9ab_v2.webp"", ""price"": 3.70117e-05, ""price_change_percent"": 15.979, ""price_change_percent1m"": 13.0671, ""price_change_percent5m"": 15.9788, ""price_change_percent1h"": 14.9424, ""volume"": 61182.9, ""liquidity"": 36825.1, ""market_cap"": 37011.7, ""total_supply"": 999999328, ""initial_liquidity"": 11754.1, ""histo"
+107,2026-06-25T15:42:27.610445+00:00,gmgn_trending,7W9HM5uDgJgy62CnoBvPtxakWxCZzSoJ21cqfrg34aEU,"",724e4d28e4c0,1,"{""id"": 184355597, ""chain"": ""sol"", ""address"": ""7W9HM5uDgJgy62CnoBvPtxakWxCZzSoJ21cqfrg34aEU"", ""name"": ""GTA Dollars"", ""symbol"": ""GTA"", ""logo"": """", ""price"": 8.31306e-05, ""price_change_percent"": 126255, ""price_change_percent1m"": -24.4924, ""price_change_percent5m"": 126255, ""price_change_percent1h"": 126255, ""volume"": 94646, ""liquidity"": 21906, ""market_cap"": 83130.6, ""total_supply"": 1000000000, ""initial_liquidity"": 2648.78, ""history_highest_market_cap"": 120582, ""swaps"": 1117, ""buys"": 909, ""sells"": 208,"
+106,2026-06-25T15:42:27.610028+00:00,gmgn_trending,8ExMqkAWaDgqB5V4kS5s1yrLtwjoGQtRz6C2NuoZpump,"",3bdf77758127,1,"{""id"": 184355493, ""chain"": ""sol"", ""address"": ""8ExMqkAWaDgqB5V4kS5s1yrLtwjoGQtRz6C2NuoZpump"", ""name"": ""Koalas of Goofsland"", ""symbol"": ""KOG"", ""logo"": ""https://gmgn.ai/external-res/91d844b528961f33028551918d462f33.gif"", ""price"": 7.11573e-05, ""price_change_percent"": 62.2471, ""price_change_percent1m"": 23.7751, ""price_change_percent5m"": 62.2472, ""price_change_percent1h"": 3744.67, ""volume"": 137530, ""liquidity"": 17909.2, ""market_cap"": 71157.3, ""total_supply"": 1000000000, ""initial_liquidity"": 11237.4, """
+105,2026-06-25T15:42:27.609693+00:00,gmgn_trending,9XSuMwsUT4kRzSav8vBsEBGFDrcDioKpd6d9XQ6kMs4d,"",ca96b168d8bf,1,"{""id"": 184301860, ""chain"": ""sol"", ""address"": ""9XSuMwsUT4kRzSav8vBsEBGFDrcDioKpd6d9XQ6kMs4d"", ""name"": ""Germany"", ""symbol"": ""GERMANY"", ""logo"": ""https://gmgn.ai/external-res/4d131e9babb7a42033488433325d171e_v2.webp"", ""price"": 8.44851e-05, ""price_change_percent"": 38.1148, ""price_change_percent1m"": 8.29782, ""price_change_percent5m"": 38.1148, ""price_change_percent1h"": 851.094, ""volume"": 157696, ""liquidity"": 29911.3, ""market_cap"": 84485.1, ""total_supply"": 1000000000, ""initial_liquidity"": 4862.26, ""hist"
+104,2026-06-25T15:42:27.608854+00:00,gmgn_trending,61q96EVgfH3Gxd9RpWNvVzy27JEwMhCJLg1M8Et9zFVH,"",aacef3a5ab66,1,"{""id"": 184352671, ""chain"": ""sol"", ""address"": ""61q96EVgfH3Gxd9RpWNvVzy27JEwMhCJLg1M8Et9zFVH"", ""name"": ""world.xyz"", ""symbol"": ""world"", ""logo"": ""https://gmgn.ai/external-res/a58c9f312c00a8888673900f5e1e444a_v2.webp"", ""price"": 2.32474e-05, ""price_change_percent"": -46.1383, ""price_change_percent1m"": -7.01263, ""price_change_percent5m"": -46.1382, ""price_change_percent1h"": -36.3831, ""volume"": 225982, ""liquidity"": 15752.5, ""market_cap"": 23247.4, ""total_supply"": 999999652, ""initial_liquidity"": 2667.27, ""h"
+103,2026-06-25T15:31:15.707802+00:00,gmgn_trenches,74kBNEtiySXixViLQUqMpPQ1XgPBTD5gWAd7J996kzpE,42mdS1s8Wvz4LtYPf6JaHtGpVsUkZC89QknpMfmcPmn1,67d7567249a4,1,"{""address"": ""74kBNEtiySXixViLQUqMpPQ1XgPBTD5gWAd7J996kzpE"", ""bonus_category"": null, ""bot_degen_count"": 0, ""bot_degen_rate"": 0, ""bundler_mhr"": 0, ""bundler_trader_amount_rate"": 0, ""burn_status"": ""burn"", ""buy_tax"": 0, ""buy_tips"": 0, ""buys_24h"": 0, ""callout_count"": 0, ""chain"": ""sol"", ""complete_cost_time"": -1782401466, ""complete_timestamp"": 0, ""created_timestamp"": 1782401466, ""created_timestamp_us"": 1782401466341227, ""creation_tool"": """", ""creator"": ""EVcpmQ9L1cn9GRKHdXQa7cAqCTBt1LH7uQAeitrKQWi1"", ""cre"
+102,2026-06-25T15:31:15.707420+00:00,gmgn_trenches,Cro9gvReX9aE5FqXr7psq6qF69rbPdJmgVbUyNi4pump,6C2p46gJt6WB8Z5RC6ome1gj9jV82kJkSEs4xJqHtCB4,4e7295bdc8cb,1,"{""address"": ""Cro9gvReX9aE5FqXr7psq6qF69rbPdJmgVbUyNi4pump"", ""bonus_category"": null, ""bot_degen_count"": 0, ""bot_degen_rate"": 0, ""bundler_mhr"": 0, ""bundler_trader_amount_rate"": 0, ""burn_status"": ""burn"", ""buy_tax"": 0, ""buy_tips"": 0, ""buys_24h"": 0, ""callout_count"": 0, ""chain"": ""sol"", ""complete_cost_time"": -1782401468, ""complete_timestamp"": 0, ""created_timestamp"": 1782401468, ""created_timestamp_us"": 1782401468341228, ""creation_tool"": """", ""creator"": ""JCF98XrLV7feQ9dtcKieojDYYqGNFqGpqtnuC6Exc3Qo"", ""cre"
+101,2026-06-25T15:31:15.706066+00:00,gmgn_trenches,4VA6h32DKaWSYyrZu2gwU18qeX8TLUFwUdCk55YKpump,DxS72r99wqtJH28BfkjKfEhY5gzRq4gCmM2w9vraVgqS,b193cd162eec,1,"{""address"": ""4VA6h32DKaWSYyrZu2gwU18qeX8TLUFwUdCk55YKpump"", ""bonus_category"": null, ""bot_degen_count"": 0, ""bot_degen_rate"": 0, ""bundler_mhr"": 0, ""bundler_trader_amount_rate"": 0, ""burn_status"": ""burn"", ""buy_tax"": 0, ""buy_tips"": 0, ""buys_24h"": 0, ""callout_count"": 0, ""chain"": ""sol"", ""complete_cost_time"": -1782401474, ""complete_timestamp"": 0, ""created_timestamp"": 1782401474, ""created_timestamp_us"": 1782401474341229, ""creation_tool"": """", ""creator"": ""4kWPxuPH8fqawsbj3kGMCLKehgLnErLybxqjYsCyv2C2"", ""cre"
+100,2026-06-25T15:30:25.647811+00:00,candidate_arg,7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgY1Z,"",8bba15f9f898,1,{}
+99,2026-06-25T15:30:25.647507+00:00,candidate_arg,EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzL2626ndZb4bj,"",5c21abdc8ce2,1,{}
+98,2026-06-25T15:30:25.646330+00:00,candidate_arg,DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263,"",6789704f03ac,1,{}
+97,2026-06-25T15:15:47.781990+00:00,candidate_arg,FMqh9mqR6drPZqqW6wPqLHxX4rqNDWGhYLaMfoaJpump,"",df53d1e6c814,1,{}
+96,2026-06-25T15:15:47.781632+00:00,candidate_arg,24Kko3VWwMKtkB9CVct2ZAZgJzb2R2iNrYxCpTYFpump,"",c99debd3463c,1,{}
+95,2026-06-25T15:15:47.780998+00:00,candidate_arg,GDJDynz2wGkDX5JToeYgFwY8jg7o2okuoD7EhBXpump,"",ff7078d6a00c,1,{}
+94,2026-06-25T15:14:17.496082+00:00,gmgn_trending,DgwNcEHEEbLfvLGw8vjLqzUB633kr6bpwA2yWQsg4Dvh,"",91da2a202d41,1,"{""id"": 184352897, ""chain"": ""sol"", ""address"": ""DgwNcEHEEbLfvLGw8vjLqzUB633kr6bpwA2yWQsg4Dvh"", ""name"": ""world.xyz"", ""symbol"": ""world"", ""logo"": ""https://gmgn.ai/external-res/a58c9f312c00a8888673900f5e1e444a_v2.webp"", ""price"": 4.47961e-05, ""price_change_percent"": -3.69752, ""price_change_percent1m"": -0.690837, ""price_change_percent5m"": -3.69757, ""price_change_percent1h"": 753344000, ""volume"": 162966, ""liquidity"": 74979, ""market_cap"": 44796.1, ""total_supply"": 1000000000, ""initial_liquidity"": 60538.4, """
+93,2026-06-25T15:14:17.495549+00:00,gmgn_trending,61q96EVgfH3Gxd9RpWNvVzy27JEwMhCJLg1M8Et9zFVH,"",ab0de8407ea0,1,"{""id"": 184352671, ""chain"": ""sol"", ""address"": ""61q96EVgfH3Gxd9RpWNvVzy27JEwMhCJLg1M8Et9zFVH"", ""name"": ""world.xyz"", ""symbol"": ""world"", ""logo"": ""https://gmgn.ai/external-res/a58c9f312c00a8888673900f5e1e444a_v2.webp"", ""price"": 4.26105e-05, ""price_change_percent"": 14.3835, ""price_change_percent1m"": 15.4265, ""price_change_percent5m"": 14.3834, ""price_change_percent1h"": 64168.5, ""volume"": 163000, ""liquidity"": 18550.4, ""market_cap"": 42610.5, ""total_supply"": 999999652, ""initial_liquidity"": 2667.27, ""histo"
+92,2026-06-25T15:14:17.494189+00:00,gmgn_trending,BcHEaaTCvycPwwsJ9yQTXdHP9X2gCLkznDbZ8VySpump,"",7e44dbdd884b,1,"{""id"": 183502869, ""chain"": ""sol"", ""address"": ""BcHEaaTCvycPwwsJ9yQTXdHP9X2gCLkznDbZ8VySpump"", ""name"": ""Jotchua"", ""symbol"": ""Jotchua"", ""logo"": ""https://gmgn.ai/external-res/d112c143568f07e7861f7c68357e23ea_v2.webp"", ""price"": 0.00754741, ""price_change_percent"": 6.05711, ""price_change_percent1m"": 4.27335, ""price_change_percent5m"": 6.05713, ""price_change_percent1h"": 22.4945, ""volume"": 174789, ""liquidity"": 695151, ""market_cap"": 7546460, ""total_supply"": 999874216, ""initial_liquidity"": 50100.9, ""history"
+91,2026-06-25T14:14:07.868595+00:00,gmgn_telegram,3zCXPnE1rfFCC7bG95HPYSn6STPrhdCGD3aMZMJbPR7a,CboLuEFzHu2onnsJ5qvbjQaFBCXmzj7SYXW7B4fohBw1,30828c5b09a6,1,"BBL (Bitcoin bubble liqui)
+
+🏷️ NewPool新池子
+🎲 CA: 3zCXPnE1rfFCC7bG95HPYSn6STPrhdCGD3aMZMJbPR7a
+💧 LP: CboLuEFzHu2onnsJ5qvbjQaFBCXmzj7SYXW7B4fohBw1
+
+💲 Price: $0.0{4}11209    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $11209.51
+💧 Liq池子: $13228 (100.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 6 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 100.98167
+- Balance USD: $6678.92789
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter 
+
+🌈 NEW: Add BlueChip Index to identify high-growth tokens GMGN.AI"
+90,2026-06-25T14:09:33.351906+00:00,gmgn_telegram,6FyU5o1sYc3h2E8vyK4W2bkN7Lu3PxqjWgdhHxDRTHBe,PUG1JPvcfrnu61emrqDAG34hcFTV6ik83h76vkbqY8V,6a954d38f864,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: 6FyU5o1sYc3h2E8vyK4W2bkN7Lu3PxqjWgdhHxDRTHBe
+💧 LP: PUG1JPvcfrnu61emrqDAG34hcFTV6ik83h76vkbqY8V
+
+💲 Price: $0.0{4}33953    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $33953.74
+💧 Liq池子: $65900 (500.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 12 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 0 ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 61.23129
+- Balance USD: $4036.36683
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+⚡️ TIP: Discover faster, Trading in seconds GMGN.ai"
+89,2026-06-25T14:08:26.563090+00:00,gmgn_telegram,DxHLgWQmhaWgNkJDizkman9e7nrTDr4Pfk6WETG1pump,63L2BgGXX3m1JXxVGJ7FQm7RxP1TcDZFfVA8mihrmFds,014b90aae0d7,1,"Tsld (TAYLOR DANCE)
+
+🏷️ NewPool新池子
+🎲 CA: DxHLgWQmhaWgNkJDizkman9e7nrTDr4Pfk6WETG1pump
+💧 LP: 63L2BgGXX3m1JXxVGJ7FQm7RxP1TcDZFfVA8mihrmFds
+
+💲 Price: $0.03285    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $32848.24
+💧 Liq池子: $45728.93 (347.91 SOL)
+💰 Initial LP底池: 70%
+👥 Holder持有人: 5 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 30.27% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 6.43736
+- Balance USD: $422.93469
+  - 🟡 Almost Poor Dev作者有点穷
+
+🌈 NEW: Wallet Copy Trading is Live! Click NOW"
+88,2026-06-25T14:07:49.820117+00:00,gmgn_telegram,3T3BRAmc4afyaBvG7gqiBbrwiFDEGze83B823MPGMbnq,6GsuD23btrvCM6cdbHBreX5hCGZ4Uea3Ste3czQWDbgr,e439367ab2b8,1,"GIRLS (Girls)
+
+🏷️ NewPool新池子
+🎲 CA: 3T3BRAmc4afyaBvG7gqiBbrwiFDEGze83B823MPGMbnq
+💧 LP: 6GsuD23btrvCM6cdbHBreX5hCGZ4Uea3Ste3czQWDbgr
+
+💲 Price: $0.0{4}40276    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $40276.13
+💧 Liq池子: $75371 (575.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 12 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 298.08321
+- Balance USD: $19533.39
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website | ✈️  Telegram 
+
+⚡️ TIP: Buy Sol Meme quickly on GMGN Bot"
+87,2026-06-25T14:06:43.092862+00:00,gmgn_telegram,9powmCMoroALiYtdbCSZ1gjkxAoadSMQ6XZGJ1a7Czdd,FXjnbqGAszJjdsQeMAB3QLkVGenDvxcS7Wg3pStkkYAB,c0190e03d321,1,"MOONEXPRES (MOONEXPRESS)
+
+🏷️ NewPool新池子
+🎲 CA: 9powmCMoroALiYtdbCSZ1gjkxAoadSMQ6XZGJ1a7Czdd
+💧 LP: FXjnbqGAszJjdsQeMAB3QLkVGenDvxcS7Wg3pStkkYAB
+
+💲 Price: $0.0{5}56104    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $5610.4701
+💧 Liq池子: $11118.44 (84.99 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 1 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 0.37989
+- Balance USD: $24.85232
+  - 🚩 Poor Dev作者很穷
+
+⚡️ TIP: Buy Sol Meme quickly on GMGN Bot"
+86,2026-06-25T14:05:55.427863+00:00,gmgn_telegram,J6NUW1FPkrM29JQTDtMhmE8MH2V6ZLQaHijm9q6rKQYy,CdnjTm7KGzzbKJ928DrvG6RuF2UebxLbXnvHiyTByv5F,6898f3dddff2,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: J6NUW1FPkrM29JQTDtMhmE8MH2V6ZLQaHijm9q6rKQYy
+💧 LP: CdnjTm7KGzzbKJ928DrvG6RuF2UebxLbXnvHiyTByv5F
+
+💲 Price: $0.0{4}32744    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $32744.34
+💧 Liq池子: $65260 (500.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 10 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 61.17391
+- Balance USD: $3991.59754
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+📢 NEW: Quickly Auto-sell Sol Meme on GMGN.ai"
+85,2026-06-25T14:04:51.056040+00:00,gmgn_telegram,FTm3gpuRXYeDq22MVpk133GM8rjnP8CqbvkQsF9c7Cti,H1DDHeXk6kwx6J51iYFzw4eWCvxmqdJdidyvUuqzNpsG,96dcaedd36ce,1,"TGB (TANGBAO)
+
+🏷️ NewPool新池子
+🎲 CA: FTm3gpuRXYeDq22MVpk133GM8rjnP8CqbvkQsF9c7Cti
+💧 LP: H1DDHeXk6kwx6J51iYFzw4eWCvxmqdJdidyvUuqzNpsG
+
+💲 Price: $0.0{4}81417    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $81417.91
+💧 Liq池子: $1302.4 (⚠️ 10.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 1 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 0 ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 177.769
+- Balance USD: $11576.32
+  - 🟢 Rich Dev作者挺有钱
+
+🔥 NEW: Tron Sunpump Meme Live Now! GMGN.AI"
+84,2026-06-25T13:59:37.801076+00:00,gmgn_telegram,B2Y6UkEBSKopuZmuWKNc2vVomQJXU42ZMEv889k8eNMv,GoA96M3TERr8JKYB513XUjLdfdNZWTA5uTPxVKCKMAFj,106c34bab8a2,1,"GIRLS (Girls)
+
+🏷️ NewPool新池子
+🎲 CA: B2Y6UkEBSKopuZmuWKNc2vVomQJXU42ZMEv889k8eNMv
+💧 LP: GoA96M3TERr8JKYB513XUjLdfdNZWTA5uTPxVKCKMAFj
+
+💲 Price: $0.0{5}87506    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $8750.6519
+💧 Liq池子: $13578.6 (106.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 5 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 0.96708
+- Balance USD: $61.96079
+  - 🚩 Poor Dev作者很穷
+
+🐦  Twitter | 🌏 Website | ✈️  Telegram 
+
+🚀 TIP: Fast SOL/Base/ETH charts with GMGN.ai"
+83,2026-06-25T13:56:58.840715+00:00,gmgn_telegram,DU13BxqHSwrGZnCJu4z98BU6UY3RuUaHD5K8Ker9re87,EyBMnWSqqjaNTF59Nqjxs9ycg75Eoy6hP2pvdtamG7kt,5df0083bf607,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: DU13BxqHSwrGZnCJu4z98BU6UY3RuUaHD5K8Ker9re87
+💧 LP: EyBMnWSqqjaNTF59Nqjxs9ycg75Eoy6hP2pvdtamG7kt
+
+💲 Price: $0.0{4}33405    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $33405.9
+💧 Liq池子: $64840 (500.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 8 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 1.33% ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 61.09239
+- Balance USD: $3961.84142
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+🌈 NEW: Wallet Copy Trading is Live! Click NOW"
+82,2026-06-25T13:54:59.881249+00:00,gmgn_telegram,5b6d6H8SzGtHQYVmGLsWzNmAsK9MJbYdj65bMcNdKvZP,8SkxGTvmDLMKC1YEgcbh98j1ebhdUykNYVeCcL79ajGq,43e81ffa92da,1,"USWR (United States Water )
+
+🏷️ NewPool新池子
+🎲 CA: 5b6d6H8SzGtHQYVmGLsWzNmAsK9MJbYdj65bMcNdKvZP
+💧 LP: 8SkxGTvmDLMKC1YEgcbh98j1ebhdUykNYVeCcL79ajGq
+
+💲 Price: $0.0{4}21721    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $21721.23
+💧 Liq池子: $27751.52 (214.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 6 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 237.51698
+- Balance USD: $15400.6
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+🚀 TIP: Fast SOL/Base/ETH charts with GMGN.ai"
+81,2026-06-25T13:54:25.715945+00:00,gmgn_telegram,3gV9TdmqioVe65rWxa8EeKyHt2XBAm3FeNuC4gTjihY2,7WWVGby9vQiBwo3JzL11G5UXYXB1Ep2cdsLTmmbYLJ4K,8b59ee0a23b7,1,"STB (STB)
+
+🏷️ NewPool新池子
+🎲 CA: 3gV9TdmqioVe65rWxa8EeKyHt2XBAm3FeNuC4gTjihY2
+💧 LP: 7WWVGby9vQiBwo3JzL11G5UXYXB1Ep2cdsLTmmbYLJ4K
+
+💲 Price: $0.0{4}8118    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $81180.36
+💧 Liq池子: $1297.6 (⚠️ 10.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 1 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 0 ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 277.07717
+- Balance USD: $17990.62
+  - 🟢 Rich Dev作者挺有钱
+
+🏆 TIP: Add GMGN Bot to your group and earn commissions! 💸 Add bot"
+80,2026-06-25T13:54:07.161364+00:00,gmgn_telegram,6C66AYvGgiQrJh4MmEnHbCZxeJF7AEfKqCwhivTCUpSo,EZa82WVyQbvMUUSfxrsQ12ybWb1MJh3S4CJqJipkJYkY,0c517e67cb4c,1,"STB (STB)
+
+🏷️ NewPool新池子
+🎲 CA: 6C66AYvGgiQrJh4MmEnHbCZxeJF7AEfKqCwhivTCUpSo
+💧 LP: EZa82WVyQbvMUUSfxrsQ12ybWb1MJh3S4CJqJipkJYkY
+
+💲 Price: $0.0{4}81017    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $81017.82
+💧 Liq池子: $1295.8 (⚠️ 10.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 1 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 0 ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 287.08387
+- Balance USD: $18591.55
+  - 🟢 Rich Dev作者挺有钱
+
+🔥 NEW: CTO signals, Dex ads, Dex social updates, and more"
+79,2026-06-25T13:51:03.919319+00:00,gmgn_telegram,14LegQjWUL4DJv4cMoXrqRC1pbo6PGVnXBNa45Aepump,Lijwm29v3AMinDbEZnjKE88PRGewtAsYSaZjKqPpdbJ,123b5e6e0602,1,"Essos (ELON SWARM)
+
+🏷️ NewPool新池子
+🎲 CA: 14LegQjWUL4DJv4cMoXrqRC1pbo6PGVnXBNa45Aepump
+💧 LP: Lijwm29v3AMinDbEZnjKE88PRGewtAsYSaZjKqPpdbJ
+
+💲 Price: $0.03242    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $32424.56
+💧 Liq池子: $45188.86 (343.43 SOL)
+💰 Initial LP底池: 70%
+👥 Holder持有人: 8 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 30% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 0.66989
+- Balance USD: $44.07223
+  - 🚩 Poor Dev作者很穷
+
+🚀 TIP: Fast SOL/Base/ETH charts with GMGN.ai"
+78,2026-06-25T13:50:45.764107+00:00,gmgn_telegram,789Dt7rMzJHbuZjZj48w3DTdwfsSWUFz7zHCeqrixjRG,9xqtEunMVy8mpf74D8tvSZms7BpAKLQBGJtKhQkEAakb,c621ee8c197a,1,"10G (ChineseWIFInternetAI)
+
+🏷️ NewPool新池子
+🎲 CA: 789Dt7rMzJHbuZjZj48w3DTdwfsSWUFz7zHCeqrixjRG
+💧 LP: 9xqtEunMVy8mpf74D8tvSZms7BpAKLQBGJtKhQkEAakb
+
+💲 Price: $0.0{4}15864    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $15864.97
+💧 Liq池子: $6684.787 (50.65 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 23 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 53.97% ❌
+🔥 烧池子: 100%%
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 7.34324
+- Balance USD: $484.58064
+  - 🟡 Almost Poor Dev作者有点穷
+
+🐦  Twitter | 🌏 Website 
+
+🚀 TIP: Fast SOL/Base/ETH charts with G"
+77,2026-06-25T13:48:38.309908+00:00,gmgn_telegram,dzQ9BsEJyLqXxiCzGq5vSPiES2WCLGRyGRZeNsMvwfd,4TPkAdsYAiYJUkCB1QgZw2F2dJSkbG6GLdfNgKDNyvJM,6506abde697f,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: dzQ9BsEJyLqXxiCzGq5vSPiES2WCLGRyGRZeNsMvwfd
+💧 LP: 4TPkAdsYAiYJUkCB1QgZw2F2dJSkbG6GLdfNgKDNyvJM
+
+💲 Price: $0.0{4}50354    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $50354.96
+💧 Liq池子: $15760.8 (120.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 12 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 99.99% ❌
+🔥 烧池子: 100%%
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 152.50081
+- Balance USD: $10014.73
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+⚡️ TIP: Discover faster, Trading in seconds GMGN.ai"
+76,2026-06-25T13:48:38.304006+00:00,gmgn_telegram,3TKfrpo8WRT5qNTKPmWscrU1mQynwG9LHzEpu1WxCCqb,F37MMbaB3SeZDgVhFdWKztLxzVS9vVw4FqTh37DbDu6d,9d3bdedf79dd,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: 3TKfrpo8WRT5qNTKPmWscrU1mQynwG9LHzEpu1WxCCqb
+💧 LP: F37MMbaB3SeZDgVhFdWKztLxzVS9vVw4FqTh37DbDu6d
+
+💲 Price: $0.0{4}33818    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $33818.26
+💧 Liq池子: $65650 (500.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 7 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 1.25% ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 61.08752
+- Balance USD: $4009.17379
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+💎 NEW: 100x MEME & Smart Money Hunter with GMGN.ai"
+75,2026-06-25T13:48:26.817862+00:00,gmgn_telegram,4H8nZBNJomxG5kNcqtXMShV8KbYP9jPjehJtts1V7RYn,ADD8mB8e5ZHz24MZyY6piD5U6uS9EAGJ4tned69L8whc,51a22f091f0e,1,"USWR (United States Water )
+
+🏷️ NewPool新池子
+🎲 CA: 4H8nZBNJomxG5kNcqtXMShV8KbYP9jPjehJtts1V7RYn
+💧 LP: ADD8mB8e5ZHz24MZyY6piD5U6uS9EAGJ4tned69L8whc
+
+💲 Price: $0.0{4}22175    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $22175.4
+💧 Liq池子: $28311.2 (215.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 6 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 24.1% ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 20.39727
+- Balance USD: $1342.95626
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+📢 NEW: Quickly Auto-sell Sol Meme on GMGN.ai"
+74,2026-06-25T13:47:44.667128+00:00,gmgn_telegram,7Rj5xxqhC7EvQpT1dx8LK95D3QB9TnYj3Kc5WodsEyik,GtuSKGmHK9Y7owVdMDP3FPDWNNfHNXQKwg8rBnN7sBAw,30bc7ab0fbc9,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: 7Rj5xxqhC7EvQpT1dx8LK95D3QB9TnYj3Kc5WodsEyik
+💧 LP: GtuSKGmHK9Y7owVdMDP3FPDWNNfHNXQKwg8rBnN7sBAw
+
+💲 Price: $0.0{4}17853    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $17853.38
+💧 Liq池子: $4864.472 (36.88 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 14 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 62.93% ❌
+🔥 烧池子: 100%%
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 18.78078
+- Balance USD: $1239.15591
+  - 🟢 Rich Dev作者挺有钱
+
+🏆 TIP: Add GMGN Bot to your group and earn commissions! 💸 Add bot"
+73,2026-06-25T13:44:32.879273+00:00,gmgn_telegram,EBYJiM77eGLKCRNvzwHdLrSeb8z8b9T2prXecCkrXGG5,9BCadkBxjA99dkXAyPBFJG52HgquRm9scX9YHrQswaGM,35bc763cbc18,1,"USWR (United States Water )
+
+🏷️ NewPool新池子
+🎲 CA: EBYJiM77eGLKCRNvzwHdLrSeb8z8b9T2prXecCkrXGG5
+💧 LP: 9BCadkBxjA99dkXAyPBFJG52HgquRm9scX9YHrQswaGM
+
+💲 Price: $0.0{4}25168    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $25168.29
+💧 Liq池子: $29081.2 (218.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 19 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 235.12871
+- Balance USD: $15678.38
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+🔥 NEW: CTO signals, Dex ads, Dex social updates, and mor"
+72,2026-06-25T13:44:24.850714+00:00,gmgn_telegram,FTA4NaSeXDajSWgFTskTXy12ZePTqBnwzKpvGMYhpcnH,J8VEVqnCP8pn7PMNsEKoK4rotH3Wf5SkB1GkN5tuz5cR,82db36c3ca8a,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: FTA4NaSeXDajSWgFTskTXy12ZePTqBnwzKpvGMYhpcnH
+💧 LP: J8VEVqnCP8pn7PMNsEKoK4rotH3Wf5SkB1GkN5tuz5cR
+
+💲 Price: $0.0{4}19618    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $19618.65
+💧 Liq池子: $34715.2 (260.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 11 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 326.32503
+- Balance USD: $21785.46
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+🔥 NEW: CTO signals, Dex ads, Dex social updates, and more"
+71,2026-06-25T13:43:36.057632+00:00,gmgn_telegram,4nRCoZj83WJa6rPq5FBqRnLCokKHJA3pEMsQ7MSWzeii,FhgcmyWXtnmS99ZPYbUGfvExhXPMnvxM6w59qPMn9T2K,015a97e48f4f,1,"USWR (United States Water )
+
+🏷️ NewPool新池子
+🎲 CA: 4nRCoZj83WJa6rPq5FBqRnLCokKHJA3pEMsQ7MSWzeii
+💧 LP: FhgcmyWXtnmS99ZPYbUGfvExhXPMnvxM6w59qPMn9T2K
+
+💲 Price: $0.0{4}18086    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $18086.18
+💧 Liq池子: $26688 (200.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 7 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 0 ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 209.17595
+- Balance USD: $13958.31
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+🌈 NEW: Add BlueChip Index to identify high-growth tokens GMGN."
+70,2026-06-25T13:42:02.058877+00:00,gmgn_telegram,CmZSFG35X5p94TJEDpBTHWaDmRcVYwNcVFEyKbk248ET,3DsizfNNmuoFRFqd6zhMTTRjjmZwZYo9JGWeR1aejFAz,af38375290ce,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: CmZSFG35X5p94TJEDpBTHWaDmRcVYwNcVFEyKbk248ET
+💧 LP: 3DsizfNNmuoFRFqd6zhMTTRjjmZwZYo9JGWeR1aejFAz
+
+💲 Price: $0.0{4}58371    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $58371.87
+💧 Liq池子: $2009.5594 (⚠️ 14.99 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 1 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 0 ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 8.56897
+- Balance USD: $574.46373
+  - 🟡 Almost Poor Dev作者有点穷
+
+🐦  Twitter | 🌏 Website 
+
+🏆 TIP: Add GMGN Bot to your group and earn commissions! 💸 Add bot"
+69,2026-06-25T13:41:40.903819+00:00,gmgn_telegram,5CJFZVfW1u3SqH91iPJJ8bJSUQJU7ByEUD7o1tz568sy,C9yZryeL1dQTyqgF79NBh9ntit2vh2hCVCXZP1p4xcKe,4ea8e3192a1e,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: 5CJFZVfW1u3SqH91iPJJ8bJSUQJU7ByEUD7o1tz568sy
+💧 LP: C9yZryeL1dQTyqgF79NBh9ntit2vh2hCVCXZP1p4xcKe
+
+💲 Price: $0.0{4}19721    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $19721.46
+💧 Liq池子: $34923.2 (260.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 11 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 5.78% ✅
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 65.3839
+- Balance USD: $4391.18303
+  - 🟢 Rich Dev作者挺有钱
+
+🐦  Twitter | 🌏 Website 
+
+🌈 NEW: Wallet Copy Trading is Live! Click NOW"
+68,2026-06-25T13:40:21.770014+00:00,gmgn_telegram,BRNiRuompn4V3kA4hTKnFdfrKYA1eG6WApNezU974j2q,76GRHxaP2xPoY3VegbvaSjiLJeyAVePUa3giBRtE26zT,db614b388440,1,"PXM (PXM COIN)
+
+🏷️ NewPool新池子
+🎲 CA: BRNiRuompn4V3kA4hTKnFdfrKYA1eG6WApNezU974j2q
+💧 LP: 76GRHxaP2xPoY3VegbvaSjiLJeyAVePUa3giBRtE26zT
+
+💲 Price: $0.0{4}49892    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $49892.03
+💧 Liq池子: $94248 (700.00 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 11 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 💎 350.64478
+- Balance USD: $23605.41
+  - 🟢 Rich Dev作者挺有钱
+
+🌏 Website 
+
+🚀 TIP: Fast SOL/Base/ETH charts with GMGN.ai"
+67,2026-06-25T13:37:18.919092+00:00,gmgn_telegram,5jiPY1AvVdvKcze4y2g4kXQ6fsX5tCxT7pCtKDZK6S9t,33dpJkJopCJyejwAH2fznR2Yb5mq3aYb2YZq1ESWekTP,21f687168365,1,"Moon (Луна)
+
+🏷️ NewPool新池子
+🎲 CA: 5jiPY1AvVdvKcze4y2g4kXQ6fsX5tCxT7pCtKDZK6S9t
+💧 LP: 33dpJkJopCJyejwAH2fznR2Yb5mq3aYb2YZq1ESWekTP
+
+💲 Price: $0.0{4}15904    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $15904.26
+💧 Liq池子: $6633.016 (48.88 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 8 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 54.16% ❌
+🔥 烧池子: 100%%
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 2.54672
+- Balance USD: $172.7951
+  - 🟡 Almost Poor Dev作者有点穷
+
+💎 NEW: 100x MEME & Smart Money Hunter with GMGN.ai"
+66,2026-06-25T13:36:44.359219+00:00,gmgn_telegram,2XMiZsrvBqDMWpLUPMxvmKGqWVUMigTPt4NQLrcPBkj7,EgaANdqm2u2AmaxiAaESwpmQJPb7ieq5MQde8YJHnmQo,1d55934b32bf,1,"WendyVerse (WendyVerse)
+
+🏷️ NewPool新池子
+🎲 CA: 2XMiZsrvBqDMWpLUPMxvmKGqWVUMigTPt4NQLrcPBkj7
+💧 LP: EgaANdqm2u2AmaxiAaESwpmQJPb7ieq5MQde8YJHnmQo
+
+💲 Price: $0.0{4}59036    Chart看K线
+🎯 Dex: Raydium
+💡 MCP: $59036.51
+💧 Liq池子: $2033.8432 (⚠️ 14.99 SOL)
+💰 Initial LP底池: 100%
+👥 Holder持有人: 1 
+
+👤 Renounced已弃权: ✅
+👥 Top10 前10持仓: 100% ❌
+
+
+👨🏻‍💻 Dev Wallet作者钱包: 
+- Balance SOL: 49.12705
+- Balance USD: $3332.77894
+  - 🟢 Rich Dev作者挺有钱
+
+⚡️ TIP: Buy Sol Meme quickly on GMGN Bot"

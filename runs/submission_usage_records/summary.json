@@ -1,0 +1,3 @@
+[{"table_name":"v2_scanner_items","row_count":115,"first_ts":"2026-06-25T12:53:44.053106+00:00","last_ts":"2026-06-25T15:44:29.787217+00:00"},
+{"table_name":"v2_runs","row_count":106,"first_ts":"2026-06-25T12:59:44.746435+00:00","last_ts":"2026-06-25T15:45:39.300106+00:00"},
+{"table_name":"v2_backtest_outcomes","row_count":8,"first_ts":"2026-06-25T15:30:53.702481+00:00","last_ts":"2026-06-25T15:46:04.030500+00:00"}]
