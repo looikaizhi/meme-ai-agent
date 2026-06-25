@@ -27,3 +27,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# gmgn-skills install artifacts (npx skills add GMGNAI/gmgn-skills)
+.agents/
+skills-lock.json

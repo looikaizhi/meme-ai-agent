@@ -196,10 +196,11 @@ tests/memedogV2/             # 镜像测试
 6. **codex 注意**:`--output-schema` 必须严格(顶层 `additionalProperties:false` 且所有属性进 `required`,可选用 `["type","null"]`),否则 400;`codex exec` 必须 `< /dev/null` 否则挂在读 stdin。
 7. **限速**:`token info/security/pool` weight=1(漏桶 rate=20/cap=20),`holders/traders` weight=5。保守 1 req/s 安全。
 
-## 来源
-- GMGN Agent API 文档:https://docs.gmgn.ai/index/gmgn-agent-api
-- gmgn-skills(GitHub):https://github.com/GMGNAI/gmgn-skills
-- gmgn-skills Wiki(中文):https://github.com/GMGNAI/gmgn-skills/wiki/Home-Chinese
+## 14. 实现与实盘验证(2026-06-25,memedogV2 已落地)
+代码全部新建于 `src/memedogV2/`(旧 `src/memedog/` 未动),40 个单测全绿,593 个旧测仍绿。
+- **确定性层实盘**:`python -m memedogV2 <BONK> LP` → 真实 gmgn-cli 调 `token security`,命中"LP 未烧/未锁"红线 drop;`token info` 未被调用(早毙短路在实盘成立)。
+- **审计层实盘**:对 BONK 跑真实 codex+gmgn-cli 的 EvidenceGatherer+Bull/Bear/Judge → 产出 `BEARISH / recommended=false / confidence=0.62`,理由综合聪明钱(258)、KOL(588)、Top10 集中度 29.87%、流动性/市值比等真实证据,并因缺失维度自降置信度。严格 schema 结构化输出有效。
+- **安装要求**:`npm i -g gmgn-cli`;`GMGN_API_KEY` 写 `~/.config/gmgn/.env`;`npx skills add GMGNAI/gmgn-skills`(装到 `.agents/skills/`,作为安装产物不入库);IPv4。
 
 ## 来源
 - GMGN Agent API 文档:https://docs.gmgn.ai/index/gmgn-agent-api
