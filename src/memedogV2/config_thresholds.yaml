@@ -7,13 +7,21 @@ gmgn:
   on_429: suspend_until_reset  # placeholder — GmgnCli raises RateLimitBanned; orchestrator skips
   max_retries: 2               # bounded retry for transient (non-429) gmgn errors (audit H-1)
 hardfilter:
+  # Redline gate: only catastrophic or structurally unsafe conditions should drop.
+  # Softer concerns are forwarded to the LLM as hardfilter flags.
   max_top10_rate: 0.35         # 0-1 fraction (35%)
+  hard_max_top10_rate: 0.55
   max_creator_rate: 0.10
   max_dev_rate: 0.10
   max_sniper_wallets: 20       # count
+  hard_max_sniper_wallets: 40
   max_fresh_wallet_rate: 0.6
+  hard_max_fresh_wallet_rate: 0.7
   max_bundler_rate: 0.3
+  hard_max_bundler_rate: 0.5
   min_liquidity_usd: 20000
   min_volume_5m: 1000
-  min_buy_sell_ratio_5m: 1.0
+  # Borderline 5m flow is a judge risk, not an automatic pre-LLM drop.
+  min_buy_sell_ratio_5m: 0.8
+  soft_min_buy_sell_ratio_5m: 1.0
   max_fdv_to_liquidity: 50

@@ -33,8 +33,8 @@ class FakeRunner:
     def __init__(self):
         self.calls = []
 
-    async def run(self, ca, lp, trace_id=""):
-        self.calls.append((ca, lp, trace_id))
+    async def run(self, ca, lp, trace_id="", *, source="", stage="unknown"):
+        self.calls.append((ca, lp, trace_id, source, stage))
         return HarnessRun(run_id="run1", ca_address=ca, backend="fake", mode="production")
 
 
@@ -47,7 +47,7 @@ async def test_processor_passes_intake_item_to_runner():
 
     run = await processor.process_next()
 
-    assert runner.calls == [("CA1", "LP1", tid)]
+    assert runner.calls == [("CA1", "LP1", tid, "", "unknown")]
     assert run.ca_address == "CA1"
     assert q.size() == 0
 
@@ -63,5 +63,8 @@ async def test_processor_drains_available_items_in_order():
     runs = await processor.drain_available()
 
     assert [r.ca_address for r in runs] == ["CA1", "CA2"]
-    assert runner.calls == [("CA1", "LP1", tid1), ("CA2", "LP2", tid2)]
+    assert runner.calls == [
+        ("CA1", "LP1", tid1, "", "unknown"),
+        ("CA2", "LP2", tid2, "", "unknown"),
+    ]
     assert q.size() == 0

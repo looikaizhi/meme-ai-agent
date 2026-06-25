@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import time
 from typing import Any, Optional, Protocol
 
@@ -46,6 +47,7 @@ class DeepSeekBackend:
 
     def _client(self):
         from openai import AsyncOpenAI
+        _load_project_env_if_needed("DEEPSEEK_API_KEY")
         return AsyncOpenAI(api_key=os.environ["DEEPSEEK_API_KEY"], base_url=self._base_url)
 
     async def complete(self, *, role, prompt, schema):
@@ -100,3 +102,23 @@ def build_backend(name: str, **kwargs) -> ModelBackend:
     if name == "codex":
         return CodexBackend(**{k: v for k, v in kwargs.items() if k in ("cwd",)})
     raise ValueError(f"unknown backend: {name}")
+
+
+def _load_project_env_if_needed(key: str) -> None:
+    if os.environ.get(key):
+        return
+    env_path = Path(__file__).resolve().parents[3] / ".env"
+    try:
+        lines = env_path.read_text().splitlines()
+    except OSError:
+        return
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, value = stripped.split("=", 1)
+        name = name.strip()
+        if name in os.environ:
+            continue
+        value = value.strip().strip('"').strip("'")
+        os.environ[name] = value

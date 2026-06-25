@@ -4,7 +4,7 @@ import uuid
 
 from memedogV2.audit import prompts
 from memedogV2.clients.errors import RateLimitBanned
-from memedogV2.hardfilter.facts_filter import evaluate_facts
+from memedogV2.hardfilter.facts_filter import evaluate_facts_detail
 from memedogV2.harness.contracts import (
     HarnessRun, ModelCallRecord, StepResult, StepStatus,
 )
@@ -26,10 +26,18 @@ class HarnessRunner:
         self._cfg = hardfilter_cfg
         self._recorder = recorder
 
-    async def run(self, ca: str, lp: str, trace_id: str = "") -> HarnessRun:
+    async def run(
+        self,
+        ca: str,
+        lp: str,
+        trace_id: str = "",
+        *,
+        source: str = "",
+        stage: str = "unknown",
+    ) -> HarnessRun:
         run = HarnessRun(run_id=uuid.uuid4().hex[:8], ca_address=ca,
                          backend=getattr(self._backend, "name", "unknown"),
-                         mode="production")
+                         mode="production", source=source, stage=stage or "unknown")
 
         # read_facts (multi-source resolver) — never crashes the pipeline (C-1)
         try:
@@ -56,10 +64,16 @@ class HarnessRunner:
                 run.steps.append(StepResult(name=name, status=StepStatus.SKIPPED))
             return self._finish(run)
 
-        passed, dropped = evaluate_facts(resolved.facts, self._cfg)
+        decision = evaluate_facts_detail(resolved.facts, self._cfg, stage=run.stage)
+        run.hardfilter_flags = list(decision.flagged)
         run.steps.append(StepResult(name="hardfilter", status=StepStatus.OK,
-                                    detail=("passed" if passed else f"dropped: {dropped}")))
-        if not passed:
+                                    detail=(
+                                        "passed"
+                                        + (f" flags={decision.flagged}" if decision.flagged else "")
+                                        if decision.passed
+                                        else f"dropped: {decision.dropped}"
+                                    )))
+        if not decision.passed:
             for name in ["build_evidence", "bull", "bear", "judge", "signal"]:
                 run.steps.append(StepResult(name=name, status=StepStatus.SKIPPED))
             return self._finish(run)
@@ -74,17 +88,31 @@ class HarnessRunner:
         # FAILED step with no signal, not an exception out of the pipeline.
         try:
             bull, m = await self._backend.complete(
-                role="bull", prompt=prompts.analyst_prompt("bull", facts, srcs, missing),
+                role="bull",
+                prompt=prompts.analyst_prompt(
+                    "bull", facts, srcs, missing,
+                    stage=run.stage, source=run.source,
+                    hardfilter_flags=run.hardfilter_flags,
+                ),
                 schema=prompts.ANALYST_SCHEMA)
             run.steps.append(self._model_step("bull", m))
             bear, m = await self._backend.complete(
-                role="bear", prompt=prompts.analyst_prompt("bear", facts, srcs, missing),
+                role="bear",
+                prompt=prompts.analyst_prompt(
+                    "bear", facts, srcs, missing,
+                    stage=run.stage, source=run.source,
+                    hardfilter_flags=run.hardfilter_flags,
+                ),
                 schema=prompts.ANALYST_SCHEMA)
             run.steps.append(self._model_step("bear", m))
 
             verdict, m = await self._backend.complete(
                 role="judge",
-                prompt=prompts.judge_prompt(facts, srcs, missing, bull=bull, bear=bear),
+                prompt=prompts.judge_prompt(
+                    facts, srcs, missing, bull=bull, bear=bear,
+                    stage=run.stage, source=run.source,
+                    hardfilter_flags=run.hardfilter_flags,
+                ),
                 schema=prompts.JUDGE_SCHEMA)
             run.steps.append(self._model_step("judge", m))
         except RateLimitBanned as e:

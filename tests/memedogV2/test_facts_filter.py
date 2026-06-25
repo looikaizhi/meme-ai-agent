@@ -1,10 +1,12 @@
-from memedogV2.hardfilter.facts_filter import evaluate_facts
+from memedogV2.hardfilter.facts_filter import evaluate_facts, evaluate_facts_detail
 from memedogV2.sources.base import Facts
 
 CFG = {"max_top10_rate": 0.35, "max_creator_rate": 0.10, "max_dev_rate": 0.10,
-       "max_sniper_wallets": 20, "max_fresh_wallet_rate": 0.6, "max_bundler_rate": 0.3,
-       "min_liquidity_usd": 20000, "min_volume_5m": 1000, "min_buy_sell_ratio_5m": 1.0,
-       "max_fdv_to_liquidity": 50}
+       "hard_max_top10_rate": 0.55, "max_sniper_wallets": 20, "hard_max_sniper_wallets": 40,
+       "max_fresh_wallet_rate": 0.6, "hard_max_fresh_wallet_rate": 0.7,
+       "max_bundler_rate": 0.3, "hard_max_bundler_rate": 0.5,
+       "min_liquidity_usd": 20000, "min_volume_5m": 1000, "min_buy_sell_ratio_5m": 0.8,
+       "soft_min_buy_sell_ratio_5m": 1.0, "max_fdv_to_liquidity": 50}
 
 
 def _clean():
@@ -32,6 +34,14 @@ def test_lp_unsafe_drops():
     assert passed is False and any("LP" in d for d in dropped)
 
 
+def test_pending_stage_lp_unsafe_flags_not_drops():
+    f = _clean(); f.lp_safe = False
+    decision = evaluate_facts_detail(f, CFG, stage="new_creation")
+    assert decision.passed is True
+    assert decision.dropped == []
+    assert any("LP" in flag for flag in decision.flagged)
+
+
 def test_honeypot_drops():
     f = _clean(); f.honeypot = True
     passed, dropped = evaluate_facts(f, CFG)
@@ -42,6 +52,20 @@ def test_high_concentration_drops():
     f = _clean(); f.top10_rate = 0.9
     passed, dropped = evaluate_facts(f, CFG)
     assert passed is False and any("top10" in d for d in dropped)
+
+
+def test_soft_concentration_flags_not_drops():
+    f = _clean(); f.top10_rate = 0.4
+    decision = evaluate_facts_detail(f, CFG)
+    assert decision.passed is True
+    assert any("top10" in flag for flag in decision.flagged)
+
+
+def test_borderline_buy_sell_flags_not_drops():
+    f = _clean(); f.buys_5m = 9; f.sells_5m = 10
+    decision = evaluate_facts_detail(f, CFG)
+    assert decision.passed is True
+    assert any("buy/sell" in flag for flag in decision.flagged)
 
 
 def test_low_liquidity_drops():
