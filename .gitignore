@@ -34,4 +34,6 @@ htmlcov/
 # gmgn-skills install artifacts (npx skills add GMGNAI/gmgn-skills)
 .agents/
 skills-lock.json
-runs/
+runs/*
+!runs/submission_usage_records/
+!runs/submission_usage_records/**
