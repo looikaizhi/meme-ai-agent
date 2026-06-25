@@ -43,4 +43,9 @@ class Signal(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     rationale: str
     evidence_refs: list[str] = Field(default_factory=list)
+    # Detailed grounded report (filled by the Judge stage)
+    summary: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    key_metrics: list[str] = Field(default_factory=list)
     trace_id: str = ""

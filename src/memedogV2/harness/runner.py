@@ -8,12 +8,12 @@ from memedogV2.hardfilter.facts_filter import evaluate_facts
 from memedogV2.harness.contracts import (
     HarnessRun, ModelCallRecord, StepResult, StepStatus,
 )
-from memedogV2.harness.evidence_builder import build_evidence_from_facts
+from memedogV2.harness.evidence_builder import important_missing
 from memedogV2.models.contracts import Signal, SignalKind
 
 _STEPS_TO_SKIP_ON_DROP = ["build_evidence", "bull", "bear", "judge", "signal"]
 
-_JUDGE_REQUIRED = {"signal", "recommended", "confidence", "rationale"}
+_JUDGE_REQUIRED = {"signal", "recommended", "confidence", "summary"}
 
 
 class HarnessRunner:
@@ -62,25 +62,27 @@ class HarnessRunner:
                 run.steps.append(StepResult(name=name, status=StepStatus.SKIPPED))
             return self._finish(run)
 
-        bundle = build_evidence_from_facts(facts=resolved.facts, ca=ca)
+        facts, srcs = resolved.facts, resolved.sources
+        missing = important_missing(facts)
         run.steps.append(StepResult(name="build_evidence", status=StepStatus.OK,
-                                    detail=f"missing={bundle.missing}"))
+                                    detail=f"fields={len(srcs)} missing={len(missing)}"))
 
         # The whole audit (real model calls + verdict parsing) is wrapped so run()
         # never raises: a backend network error or malformed model output becomes a
         # FAILED step with no signal, not an exception out of the pipeline.
         try:
             bull, m = await self._backend.complete(
-                role="bull", prompt=prompts.analyst_prompt("bull", bundle),
+                role="bull", prompt=prompts.analyst_prompt("bull", facts, srcs, missing),
                 schema=prompts.ANALYST_SCHEMA)
             run.steps.append(self._model_step("bull", m))
             bear, m = await self._backend.complete(
-                role="bear", prompt=prompts.analyst_prompt("bear", bundle),
+                role="bear", prompt=prompts.analyst_prompt("bear", facts, srcs, missing),
                 schema=prompts.ANALYST_SCHEMA)
             run.steps.append(self._model_step("bear", m))
 
             verdict, m = await self._backend.complete(
-                role="judge", prompt=prompts.judge_prompt(bundle, bull=bull, bear=bear),
+                role="judge",
+                prompt=prompts.judge_prompt(facts, srcs, missing, bull=bull, bear=bear),
                 schema=prompts.JUDGE_SCHEMA)
             run.steps.append(self._model_step("judge", m))
         except RateLimitBanned as e:
@@ -114,14 +116,23 @@ class HarnessRunner:
             confidence = max(0.0, min(1.0, float(verdict["confidence"])))
         except (ValueError, TypeError):
             return None
-        refs = verdict.get("evidence_refs", [])
+
+        def _strs(key):
+            v = verdict.get(key, [])
+            return [str(x) for x in v] if isinstance(v, list) else []
+
+        summary = str(verdict.get("summary", ""))
         return Signal(
             ca_address=ca,
             signal=kind,
             recommended=bool(verdict["recommended"]),
             confidence=confidence,
-            rationale=str(verdict["rationale"]),
-            evidence_refs=list(refs) if isinstance(refs, list) else [],
+            rationale=summary,                       # back-compat: rationale = summary
+            evidence_refs=_strs("evidence_refs"),
+            summary=summary,
+            strengths=_strs("strengths"),
+            risks=_strs("risks"),
+            key_metrics=_strs("key_metrics"),
             trace_id=trace_id,
         )
 

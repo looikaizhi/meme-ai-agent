@@ -29,8 +29,10 @@ async def test_clean_token_flows_to_recommended_signal():
     resolver = DataResolver(sources={"gmgn": StubSource("gmgn", CLEAN)})
     backend = FakeBackend(responses={
         "bull": {"thesis": "x", "points": []}, "bear": {"thesis": "y", "points": []},
-        "judge": {"signal": "BULLISH", "recommended": True, "confidence": 0.7,
-                  "rationale": "net positive", "evidence_refs": []}})
+        "judge": {"recommended": True, "signal": "BULLISH", "confidence": 0.7,
+                  "summary": "net positive", "strengths": ["liq healthy"],
+                  "risks": ["dev tokens"], "key_metrics": ["liquidity=50000"]}})
     runner = HarnessRunner(resolver=resolver, backend=backend, hardfilter_cfg=CFG)
     run = await runner.run("CA", "LP", trace_id="t-e2e")
     assert run.final_signal is not None and run.final_signal.signal.value == "BULLISH"
+    assert run.final_signal.summary and run.final_signal.key_metrics

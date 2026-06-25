@@ -91,5 +91,11 @@ async def test_gate_real_pipeline():
     # if it no longer reaches the audit, skip loudly rather than fail.
     judge_ran = any(s.name == "judge" and s.status.value in ("ok", "degraded") for s in run.steps)
     _need(judge_ran, f"pinned token {PINNED_CA[:8]} no longer passes hardfilter (likely died) — refresh it")
-    assert run.final_signal is not None
-    assert run.final_signal.signal.value in ("BULLISH", "BEARISH", "NEUTRAL")
+    sig = run.final_signal
+    assert sig is not None
+    assert sig.signal.value in ("BULLISH", "BEARISH", "NEUTRAL")
+    # detailed grounded report: recommend decision + narrative + structured findings
+    assert isinstance(sig.recommended, bool)
+    assert sig.summary, "Judge produced no summary"
+    assert sig.key_metrics, "Judge cited no key metrics"
+    assert sig.strengths or sig.risks, "Judge listed neither strengths nor risks"

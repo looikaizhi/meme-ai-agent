@@ -29,8 +29,9 @@ CFG = {"max_top10_rate": 0.35, "max_creator_rate": 0.10, "max_dev_rate": 0.10,
 def _backend():
     return FakeBackend(responses={
         "bull": {"thesis": "x", "points": []}, "bear": {"thesis": "y", "points": []},
-        "judge": {"signal": "BULLISH", "recommended": True, "confidence": 0.7,
-                  "rationale": "ok", "evidence_refs": []}})
+        "judge": {"recommended": True, "signal": "BULLISH", "confidence": 0.7,
+                  "summary": "net positive", "strengths": ["liquidity $50k healthy"],
+                  "risks": ["dev created many tokens"], "key_metrics": ["liquidity=50000"]}})
 
 
 def _runner(pf):
@@ -41,7 +42,10 @@ def _runner(pf):
 @pytest.mark.asyncio
 async def test_clean_facts_run_full_workflow():
     run = await _runner(CLEAN).run("CA", "LP", trace_id="t1")
-    assert run.final_signal is not None and run.final_signal.recommended is True
+    sig = run.final_signal
+    assert sig is not None and sig.recommended is True
+    # detailed report carried into the signal
+    assert sig.summary and sig.strengths and sig.risks and sig.key_metrics
     names = [s.name for s in run.steps]
     assert names == ["read_facts", "hardfilter", "build_evidence", "bull", "bear", "judge", "signal"]
     assert any(s.tool_calls for s in run.steps)
@@ -74,3 +78,35 @@ async def test_source_failure_does_not_crash():
     run = await runner.run("CA", "LP")     # must NOT raise (C-1)
     assert run.final_signal is None
     assert any(s.status == StepStatus.FAILED for s in run.steps)
+
+
+def _runner_with_judge(judge_obj):
+    backend = FakeBackend(responses={
+        "bull": {"thesis": "x", "points": []}, "bear": {"thesis": "y", "points": []},
+        "judge": judge_obj})
+    resolver = DataResolver(sources={"gmgn": StubSource("gmgn", CLEAN)})
+    return HarnessRunner(resolver=resolver, backend=backend, hardfilter_cfg=CFG)
+
+
+@pytest.mark.asyncio
+async def test_invalid_signal_enum_degrades_no_crash():
+    judge = {"recommended": True, "signal": "STRONG_BUY", "confidence": 0.7,
+             "summary": "s", "strengths": [], "risks": [], "key_metrics": []}
+    run = await _runner_with_judge(judge).run("CA", "LP")
+    assert run.final_signal is None
+    assert any(s.name == "signal" and s.status == StepStatus.FAILED for s in run.steps)
+
+
+@pytest.mark.asyncio
+async def test_missing_summary_degrades_no_crash():
+    judge = {"recommended": True, "signal": "BULLISH", "confidence": 0.7}  # no summary
+    run = await _runner_with_judge(judge).run("CA", "LP")
+    assert run.final_signal is None
+
+
+@pytest.mark.asyncio
+async def test_out_of_range_confidence_clamped():
+    judge = {"recommended": True, "signal": "BULLISH", "confidence": 1.5,
+             "summary": "s", "strengths": [], "risks": [], "key_metrics": []}
+    run = await _runner_with_judge(judge).run("CA", "LP")
+    assert run.final_signal is not None and run.final_signal.confidence == 1.0

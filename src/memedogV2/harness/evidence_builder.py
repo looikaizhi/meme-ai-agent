@@ -48,3 +48,10 @@ def build_evidence_from_facts(*, facts: Facts, ca: str) -> EvidenceBundle:
     }
     missing = [k for k, v in fields.items() if v is None]
     return EvidenceBundle(ca_address=ca, missing=missing, **fields)
+
+
+def important_missing(facts: Facts) -> list[str]:
+    """Canonical fact fields that came back unavailable — surfaced to the audit so
+    the models treat them as unknown (and never invent them)."""
+    from memedogV2.sources.base import ALL_FIELDS
+    return [name for name in ALL_FIELDS if getattr(facts, name) is None]
