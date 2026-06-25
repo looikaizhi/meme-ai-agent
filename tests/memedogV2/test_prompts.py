@@ -18,18 +18,36 @@ def test_evidence_text_groups_with_sources_and_missing():
                   liquidity_usd=57000, smart_money_count=52, dev_created_count=69)
     sources = {"mint_revoked": "rugcheck", "lp_safe": "rugcheck", "top10_rate": "rugcheck",
                "liquidity_usd": "gmgn", "smart_money_count": "gmgn", "dev_created_count": "gmgn"}
-    txt = evidence_text(facts, sources, ["historical_ath"])
+    txt = evidence_text(
+        facts,
+        sources,
+        ["historical_ath"],
+        stage="trending",
+        source="gmgn_trending",
+        hardfilter_flags=["momentum: buy/sell 0.9 < 1.0"],
+    )
     assert "SAFETY:" in txt and "MOMENTUM:" in txt and "SMART_MONEY_DEV:" in txt
+    assert "CONTEXT: stage=trending | discovery_source=gmgn_trending" in txt
     assert "mint_revoked=True (rugcheck)" in txt
     assert "liquidity_usd=57000.0 (gmgn)" in txt
     assert "dev_created_count=69 (gmgn)" in txt
+    assert "HARD_FILTER_FLAGS: ['momentum: buy/sell 0.9 < 1.0']" in txt
     assert "MISSING: ['historical_ath']" in txt
 
 
 def test_role_prompts_are_grounded():
     facts = Facts(liquidity_usd=57000)
-    bp = analyst_prompt("bull", facts, {"liquidity_usd": "gmgn"}, [])
+    bp = analyst_prompt(
+        "bull",
+        facts,
+        {"liquidity_usd": "gmgn"},
+        [],
+        stage="new_creation",
+        hardfilter_flags=["authority: LP not burned/locked (stage_pending)"],
+    )
     assert "BULL" in bp and "ONLY on the DATA" in bp
+    assert "stage=new_creation" in bp
+    assert "HARD_FILTER_FLAGS" in bp
     assert "BEAR" in analyst_prompt("bear", facts, {}, [])
     jp = judge_prompt(facts, {}, ["historical_ath"],
                       bull={"thesis": "x", "points": []}, bear={"thesis": "y", "points": []})

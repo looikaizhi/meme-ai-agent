@@ -188,7 +188,12 @@ class LaunchScanner:
     def enqueue_text(self, text: str | None) -> list[EnqueuedScanItem]:
         results: list[EnqueuedScanItem] = []
         for item in self.scan_text(text):
-            trace_id = self._intake.enqueue(item.ca_address, item.lp_address)
+            trace_id = self._intake.enqueue(
+                item.ca_address,
+                item.lp_address,
+                source=item.source,
+                stage="new_creation",
+            )
             results.append(
                 EnqueuedScanItem(
                     item=item,
@@ -216,7 +221,12 @@ class IntakeBufferAdapter:
         liquidity_pool: str = "",
         raw_text: str = "",
     ) -> None:
-        trace_id = self._intake.enqueue(mint, liquidity_pool)
+        trace_id = self._intake.enqueue(
+            mint,
+            liquidity_pool,
+            source=source or "gmgn_telegram",
+            stage="new_creation",
+        )
         if trace_id:
             self._recent.append(mint)
             self._recent = self._recent[-100:]

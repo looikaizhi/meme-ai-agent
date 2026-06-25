@@ -47,6 +47,9 @@ class HarnessRun(BaseModel):
     ca_address: str
     backend: str
     mode: str               # "production" | "evaluation"
+    source: str = ""
+    stage: str = "unknown"
+    hardfilter_flags: list[str] = Field(default_factory=list)
     steps: list[StepResult] = Field(default_factory=list)
     facts_snapshot: dict[str, Any] = Field(default_factory=dict)
     facts_sources: dict[str, str] = Field(default_factory=dict)
