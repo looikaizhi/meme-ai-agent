@@ -184,10 +184,23 @@ tests/memedogV2/             # 镜像测试
 - 审计:mock codex `--output-schema` 输出,验证 EvidenceBundle 装配、bull/bear 共享、judge 合议与降级标注。
 - 不在测试中真实联网。
 
-## 13. 开放风险 / 待验证
-- **codex exec 能否非交互地稳定跑 gmgn skill + gmgn-cli**(Phase 0 验证)。
-- **gmgn 各 endpoint weight 与每日配额**(未公开,spike 实测)。
-- **图2 部分字段是否真出现在 `token security --raw`**(如 Sniper/Fresh Wallet/Bundler/历史战绩)还是需额外命令 —— spike 时核对真实 JSON 字段。
+## 13. Phase 0 spike 结论(2026-06-25,GREEN)与修正
+**spike 已通过**:`codex exec --dangerously-bypass-approvals-and-sandbox --output-schema`(model gpt-5.5)成功跑通 `gmgn-cli token security` 并返回 schema 合法 JSON。`gmgn-cli@1.4.7` 三条命令均返回真实数据。fixtures 存 `tests/memedogV2/fixtures/`,脚本 `scripts/spike_codex_gmgn.sh`。
+
+确认的关键事实(已据此修正 plan):
+1. **gmgn-cli 装在 `npm i -g gmgn-cli`,key 读 `~/.config/gmgn/.env`**(不是项目 .env)。IPv6 会 401/403,需 IPv4。
+2. **HardFilter 只需 2 条命令(`security` + `info`),不是 3 条**:`token info` 已含集中度(`stat.*`)、操盘(`stat.*`/`wallet_tags_stat.*`)、动量(`liquidity`/`price.*`)、dev、聪明钱;`token security` 只补权限+burn/lock+tax。`token pool` 对硬闸冗余。
+3. **几乎所有数值字段是 JSON 字符串,比率是 0–1 小数**(`top_10_holder_rate="0"`、`dev_team_hold_rate="0.0000066283"`、`liquidity="9673213.6"`);仅计数(`buys_5m`、`*_wallets`)是 int。规则须 str→float 强转 + 比率按小数比。阈值改为小数(如 `max_top10_rate: 0.35`)。
+4. **SOL 无 `is_honeypot`/`rug_ratio`/`sniper_count`(在 security)**;蜜罐看 `honeypot`(int 0/1),狙击/新钱包/bundler 计数在 `info.wallet_tags_stat.*`,比率在 `info.stat.*`。
+5. **无 dev 毕业率字段** → 取消"极端 dev 硬闸",dev 战绩(`dev.creator_open_count`、`dev.ath_token_info`)全部移入 LLM 证据层。
+6. **codex 注意**:`--output-schema` 必须严格(顶层 `additionalProperties:false` 且所有属性进 `required`,可选用 `["type","null"]`),否则 400;`codex exec` 必须 `< /dev/null` 否则挂在读 stdin。
+7. **限速**:`token info/security/pool` weight=1(漏桶 rate=20/cap=20),`holders/traders` weight=5。保守 1 req/s 安全。
+
+## 14. 实现与实盘验证(2026-06-25,memedogV2 已落地)
+代码全部新建于 `src/memedogV2/`(旧 `src/memedog/` 未动),40 个单测全绿,593 个旧测仍绿。
+- **确定性层实盘**:`python -m memedogV2 <BONK> LP` → 真实 gmgn-cli 调 `token security`,命中"LP 未烧/未锁"红线 drop;`token info` 未被调用(早毙短路在实盘成立)。
+- **审计层实盘**:对 BONK 跑真实 codex+gmgn-cli 的 EvidenceGatherer+Bull/Bear/Judge → 产出 `BEARISH / recommended=false / confidence=0.62`,理由综合聪明钱(258)、KOL(588)、Top10 集中度 29.87%、流动性/市值比等真实证据,并因缺失维度自降置信度。严格 schema 结构化输出有效。
+- **安装要求**:`npm i -g gmgn-cli`;`GMGN_API_KEY` 写 `~/.config/gmgn/.env`;`npx skills add GMGNAI/gmgn-skills`(装到 `.agents/skills/`,作为安装产物不入库);IPv4。
 
 ## 来源
 - GMGN Agent API 文档:https://docs.gmgn.ai/index/gmgn-agent-api
